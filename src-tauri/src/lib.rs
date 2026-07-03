@@ -20,6 +20,10 @@ use windows::Win32::NetworkManagement::IpHelper::{
     GetExtendedTcpTable, MIB_TCPROW_OWNER_PID, MIB_TCPTABLE_OWNER_PID, TCP_TABLE_OWNER_PID_ALL,
 };
 use windows::Win32::Foundation::CloseHandle;
+use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+use windows::Win32::Security::{
+    GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY,
+};
 
 pub struct AppState {
     pub app: Arc<Mutex<App>>,
@@ -37,20 +41,27 @@ pub struct AppStatePayload {
 }
 
 fn check_is_admin() -> bool {
-    let output = std::process::Command::new("powershell")
-        .args(&[
-            "-NoProfile",
-            "-Command",
-            "([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)",
-        ])
-        .output();
-
-    let is_admin = match output {
-        Ok(out) => String::from_utf8_lossy(&out.stdout).trim() == "True",
-        Err(_) => false,
-    };
-    logger::info(&format!("Administrator privileges check: {}", is_admin));
-    is_admin
+    unsafe {
+        let process = GetCurrentProcess();
+        let mut token = windows::Win32::Foundation::HANDLE::default();
+        if OpenProcessToken(process, TOKEN_QUERY, &mut token).is_err() {
+            logger::info("Administrator privileges check: false (OpenProcessToken failed)");
+            return false;
+        }
+        let mut elevation = TOKEN_ELEVATION::default();
+        let mut return_length = 0u32;
+        let size = std::mem::size_of::<TOKEN_ELEVATION>() as u32;
+        let is_admin = GetTokenInformation(
+            token,
+            TokenElevation,
+            Some(&mut elevation as *mut _ as *mut _),
+            size,
+            &mut return_length,
+        ).is_ok() && elevation.TokenIsElevated != 0;
+        let _ = CloseHandle(token);
+        logger::info(&format!("Administrator privileges check: {}", is_admin));
+        is_admin
+    }
 }
 
 fn spawn_immediate_ping(state: Arc<Mutex<App>>, app_handle: AppHandle) {

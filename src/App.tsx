@@ -64,6 +64,10 @@ export default function App() {
         try {
           const update = await check();
           if (update && active) {
+            // Force the window to show so the user sees the update progress
+            // even if the app was started hidden in the tray.
+            await getCurrentWindow().show();
+            await getCurrentWindow().setFocus();
             addLog("System Update // New update version found!");
             setUpdateStatus("Downloading update...");
             setUpdateProgress(0);
@@ -287,7 +291,11 @@ export default function App() {
   };
 
   const handleClose = () => {
-    getCurrentWindow().close();
+    if (autostartMode === "icon") {
+      getCurrentWindow().hide();
+    } else {
+      getCurrentWindow().close();
+    }
   };
 
   return (
@@ -686,8 +694,8 @@ export default function App() {
             <div className="flex flex-col gap-4 text-xs font-mono">
               <div className="flex items-center justify-between bg-slate-950/40 p-3 rounded border border-slate-800/80">
                 <div className="flex flex-col gap-0.5">
-                  <span className="font-bold text-slate-200">INICIO AUTOMÁTICO</span>
-                  <span className="text-[9px] text-slate-500">Ejecutar Sombra al iniciar el sistema operativo.</span>
+                  <span className="font-bold text-slate-200">AUTO-START</span>
+                  <span className="text-[9px] text-slate-500">Launch Sombra when the operating system starts.</span>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -703,13 +711,13 @@ export default function App() {
               {autostartEnabled && (
                 <div className="flex flex-col gap-2 bg-slate-950/40 p-3 rounded border border-slate-800/80">
                   <span className="font-bold text-violet-400 text-[10px]">
-                    MODO DE INICIO
+                    STARTUP MODE
                   </span>
                   <div className="flex flex-col gap-2 mt-1">
                     {[
-                      { mode: "normal", label: "Normal", desc: "Abre la interfaz de la aplicacion de forma habitual." },
-                      { mode: "minimized", label: "Minimizado", desc: "Inicia la aplicacion minimizada en la barra de tareas." },
-                      { mode: "icon", label: "Oculto en Bandeja", desc: "Inicia en segundo plano. Doble clic al icono de la bandeja para abrir." }
+                      { mode: "normal", label: "Normal", desc: "Opens the application interface as usual." },
+                      { mode: "minimized", label: "Minimized", desc: "Starts the application minimized to the taskbar." },
+                      { mode: "icon", label: "Hidden in Tray", desc: "Starts in the background. Double-click the tray icon to open." }
                     ].map((item) => (
                       <label
                         key={item.mode}
@@ -743,7 +751,7 @@ export default function App() {
                 onClick={() => setShowSettings(false)}
                 className="px-4 py-1.5 font-mono text-[9px] font-bold tracking-wider rounded border border-violet-500/20 bg-violet-500/5 text-violet-400 hover:bg-violet-500/10 hover:border-violet-500/40 transition-all cursor-pointer"
               >
-                CERRAR AJUSTES
+                CLOSE SETTINGS
               </button>
             </div>
           </div>
