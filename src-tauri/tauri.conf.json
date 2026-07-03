@@ -1,0 +1,55 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Sombra",
+  "version": "1.0.0",
+  "identifier": "com.sombra.app",
+  "build": {
+    "beforeDevCommand": "npx --no-install vite",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Sombra: Overwatch Region selector",
+        "width": 1280,
+        "height": 720,
+        "resizable": false,
+        "minWidth": 1280,
+        "minHeight": 720,
+        "maxWidth": 1280,
+        "maxHeight": 720,
+        "maximizable": false,
+        "decorations": false,
+        "center": true,
+        "devtools": false,
+        "backgroundColor": "#030712",
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://github.com/jmaxdev/sombra/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEUwQUFCNTEwNkI1OEY2MkQKUldRdDlsaHJFTFdxNEkyVzAzaGRSditiUFEzYVM1WEpkWnNtVFpvSVN3UHdRRFBhVEdqK2wvRk0K"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "createUpdaterArtifacts": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

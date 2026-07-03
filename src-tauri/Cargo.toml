@@ -1,0 +1,43 @@
+[package]
+name = "sombra"
+version = "0.1.0"
+description = "Sombra: Overwatch Region selector"
+authors = ["Antigravity"]
+edition = "2021"
+
+[lib]
+name = "sombra_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-opener = "2"
+tauri-plugin-store = "2.0.1" # Standard Tauri Store Plugin v2
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+anyhow = "1"
+chrono = "0.4"
+reqwest = { version = "0.12", features = ["json"] }
+
+# Windows API features
+windows = { version = "0.58.0", features = [
+    "Win32_System_Com",
+    "Win32_System_Ole",
+    "Win32_System_Variant",
+    "Win32_NetworkManagement_WindowsFirewall",
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_Foundation",
+    "Win32_System_Threading",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_Diagnostics_ToolHelp"
+] }
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-single-instance = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"

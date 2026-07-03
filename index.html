@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SOMBRA: Overwatch Region selector</title>
+</head>
+
+<body>
+  <div id="root">
+    <!-- Static HTML Loading Screen -->
+    <style>
+      .static-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background-color: #030712;
+        /* slate-950 */
+        color: #f8fafc;
+        font-family: monospace;
+      }
+
+      .logo-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 80px;
+        height: 80px;
+        border-radius: 4px;
+        background-color: rgba(139, 92, 246, 0.1);
+        /* violet-600/10 */
+        border: 1px solid rgba(139, 92, 246, 0.2);
+        /* violet-500/20 */
+        box-shadow: 0 0 40px rgba(139, 92, 246, 0.06);
+        margin-bottom: 24px;
+        animation: pulse-logo 2s infinite ease-in-out;
+      }
+
+      .logo-img {
+        width: 48px;
+        height: 48px;
+      }
+
+      .loading-text {
+        font-size: 10px;
+        font-weight: bold;
+        letter-spacing: 0.2em;
+        color: #a78bfa;
+        /* violet-400 */
+        text-transform: uppercase;
+        animation: pulse-logo 2s infinite ease-in-out;
+      }
+
+      .loading-subtext {
+        font-size: 8px;
+        color: #64748b;
+        /* slate-500 */
+        letter-spacing: 0.05em;
+        margin-top: 4px;
+      }
+
+      @keyframes pulse-logo {
+
+        0%,
+        100% {
+          opacity: 1;
+        }
+
+        50% {
+          opacity: 0.5;
+        }
+      }
+    </style>
+    <div class="static-splash">
+      <div class="logo-container">
+        <img class="logo-img" src="/src/assets/icon.png" alt="Sombra Logo" />
+      </div>
+      <div class="loading-text">LOADING PROTOCOL // SOMBRA</div>
+      <div class="loading-subtext">INITIALIZING CORE SYSTEM...</div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
+</html>
