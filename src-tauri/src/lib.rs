@@ -30,6 +30,9 @@ pub struct AppState {
     pub is_admin: bool,
 }
 
+/// Sync-readable autostart mode for use in the synchronous on_window_event handler.
+pub struct AutostartMode(pub std::sync::Mutex<String>);
+
 #[derive(serde::Serialize, Clone)]
 pub struct AppStatePayload {
     pub mode: OperationMode,
@@ -131,14 +134,23 @@ async fn save_autostart_settings(
     enabled: bool,
     mode: String,
     state: State<'_, AppState>,
+    app_handle: AppHandle,
 ) -> Result<(), String> {
     if !state.is_admin {
         return Err("Administrator privileges required to change settings.".to_string());
     }
     let mut app = state.app.lock().await;
     app.autostart_enabled = enabled;
-    app.autostart_mode = mode;
+    app.autostart_mode = mode.clone();
     app.save_settings().map_err(|e| e.to_string())?;
+
+    // Keep the sync AutostartMode state in sync so on_window_event sees the new value.
+    if let Some(mode_state) = app_handle.try_state::<AutostartMode>() {
+        if let Ok(mut m) = mode_state.0.lock() {
+            *m = mode;
+        }
+    }
+
     Ok(())
 }
 
@@ -396,6 +408,10 @@ pub fn run() {
         is_admin,
     };
 
+    let autostart_mode_state = AutostartMode(std::sync::Mutex::new(
+        tauri::async_runtime::block_on(async { shared_state.app.lock().await.autostart_mode.clone() })
+    ));
+
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             let _ = app.get_webview_window("main").map(|w| {
@@ -409,6 +425,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .manage(shared_state)
+        .manage(autostart_mode_state)
         .invoke_handler(tauri::generate_handler![
             get_servers,
             get_app_state,
@@ -421,10 +438,18 @@ pub fn run() {
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                // Always hide the window instead of closing it.
-                // The user can quit from the tray icon menu.
-                api.prevent_close();
-                let _ = window.hide();
+                let is_icon_mode = window
+                    .app_handle()
+                    .try_state::<AutostartMode>()
+                    .and_then(|s| s.0.lock().ok().map(|m| m.as_str() == "icon"))
+                    .unwrap_or(false);
+
+                if is_icon_mode {
+                    // Tray-only mode: hide to tray instead of closing.
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+                // Normal / minimized mode: allow the close → process exits.
             }
         })
         .setup(|app| {
@@ -480,6 +505,12 @@ pub fn run() {
             // Keep tray alive for the lifetime of the app
             app.manage(tray);
 
+            // Enable DevTools and right-click context menu only in dev mode
+            #[cfg(debug_assertions)]
+            if let Some(w) = app.get_webview_window("main") {
+                w.open_devtools();
+            }
+
             let state_for_autostart = state_clone.clone();
             let handle_for_autostart = handle_clone.clone();
             tauri::async_runtime::spawn(async move {
@@ -493,16 +524,11 @@ pub fn run() {
 
                 if let Some(w) = handle_for_autostart.get_webview_window("main") {
                     if is_autostart && enabled {
-                        logger::info(&format!("Launched via autostart. Mode: {}", mode));
-                        if mode == "minimized" {
-                            let _ = w.show();
-                            let _ = w.minimize();
-                        } else if mode == "icon" {
-                            
-                        } else {
-                            let _ = w.show();
-                        }
+                        // Always stay hidden in tray when launched via autostart.
+                        // User can open the window from the tray icon.
+                        logger::info(&format!("Launched via autostart (mode: {}). Window hidden, tray only.", mode));
                     } else {
+                        // Normal manual launch — show the window.
                         let _ = w.show();
                     }
                 }

@@ -5,7 +5,7 @@ import { Store } from "@tauri-apps/plugin-store";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { enable, disable } from "@tauri-apps/plugin-autostart";
 import { check } from "@tauri-apps/plugin-updater";
-import { relaunch } from "@tauri-apps/plugin-process";
+import { relaunch, exit } from "@tauri-apps/plugin-process";
 import { getVersion } from '@tauri-apps/api/app';
 import {
   Activity, ShieldCheck, Lock, Trash2, Cpu, RefreshCw, Route, Terminal, Server, Copy, Minus, X, Settings
@@ -40,6 +40,11 @@ interface AppStatePayload {
   is_admin: boolean;
   autostart_enabled: boolean;
   autostart_mode: string;
+}
+
+// Disable right-click context menu in production builds
+if (!import.meta.env.DEV) {
+  document.addEventListener("contextmenu", (e) => e.preventDefault(), true);
 }
 
 export default function App() {
@@ -299,9 +304,13 @@ export default function App() {
   };
 
   const handleClose = async () => {
-    // Always hide to tray — the backend also intercepts CloseRequested.
-    // The user can quit from the tray icon "Quit Sombra" menu item.
-    await getCurrentWindow().hide();
+    if (autostartMode === "icon") {
+      // Tray-only mode: hide window, keep process alive in background.
+      await getCurrentWindow().hide();
+    } else {
+      // Normal / minimized mode: X button kills the process entirely.
+      await exit(0);
+    }
   };
 
 
