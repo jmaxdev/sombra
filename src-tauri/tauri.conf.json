@@ -37,7 +37,7 @@
       "endpoints": [
         "https://github.com/jmaxdev/sombra/releases/latest/download/latest.json"
       ],
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEUwQUFCNTEwNkI1OEY2MkQKUldRdDlsaHJFTFdxNEkyVzAzaGRSditiUFEzYVM1WEpkWnNtVFpvSVN3UHdRRFBhVEdqK2wvRk0K"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFGNDFCQkFCMUYwNzE0NTgKUldSWUZBY2ZxN3RCSCs4SW9FT2NhVzhMTnc4SGJQQWtlSlpqSFpiWDNmTjRwY0lvTG9NU0I1QlgK"
     }
   },
   "bundle": {
