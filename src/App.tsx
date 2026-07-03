@@ -5,7 +5,7 @@ import { Store } from "@tauri-apps/plugin-store";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { enable, disable } from "@tauri-apps/plugin-autostart";
 import { check } from "@tauri-apps/plugin-updater";
-import { relaunch } from "@tauri-apps/plugin-process";
+import { relaunch, exit } from "@tauri-apps/plugin-process";
 import {
   Activity, ShieldCheck, Lock, Trash2, Cpu, RefreshCw, Route, Terminal, Server, Copy, Minus, X, Settings
 } from "lucide-react";
@@ -290,11 +290,13 @@ export default function App() {
     getCurrentWindow().minimize();
   };
 
-  const handleClose = () => {
+  const handleClose = async () => {
     if (autostartMode === "icon") {
-      getCurrentWindow().hide();
+      // Tray mode active: hide window, app keeps running in background.
+      await getCurrentWindow().hide();
     } else {
-      getCurrentWindow().close();
+      // Tray not active: kill the process entirely.
+      await exit(0);
     }
   };
 
