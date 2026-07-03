@@ -5,7 +5,7 @@
 <h1 align="center">Sombra</h1>
 
 <p align="center">
-  <strong>Overwatch 2 Region Selector — Windows Desktop App</strong>
+  <strong>Overwatch Region Selector — Windows Desktop App</strong>
 </p>
 
 <p align="center">
