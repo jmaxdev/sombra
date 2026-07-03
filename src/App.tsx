@@ -68,46 +68,49 @@ export default function App() {
   useEffect(() => {
     let active = true;
     let unlisteners: (() => void)[] = [];
+    let updateIntervalId: ReturnType<typeof setInterval> | null = null;
+
+    const runUpdateCheck = async () => {
+      if (!import.meta.env.DEV) {
+        try {
+          addLog("Updater // Checking for updates...");
+          const update = await check();
+          if (update && active) {
+            await getCurrentWindow().show();
+            await getCurrentWindow().setFocus();
+            addLog(`Updater // New version available: ${update.version}. Downloading...`);
+            setUpdateStatus("Downloading update...");
+            setUpdateProgress(0);
+            let downloaded = 0;
+            let total = 0;
+            await update.downloadAndInstall((event) => {
+              if (event.event === 'Started') {
+                total = event.data.contentLength || 0;
+              } else if (event.event === 'Progress') {
+                downloaded += event.data.chunkLength;
+                const pct = total > 0 ? Math.round((downloaded / total) * 100) : 0;
+                setUpdateProgress(pct);
+                setUpdateStatus(`Downloading update: ${pct}%`);
+              } else if (event.event === 'Finished') {
+                setUpdateStatus("Update finished. Restarting...");
+              }
+            });
+            addLog("Updater // Installation successful. Relaunching...");
+            await relaunch();
+          } else {
+            addLog("Updater // No updates available. Running latest version.");
+          }
+        } catch (updateErr) {
+          const msg = updateErr instanceof Error ? updateErr.message : String(updateErr);
+          addLog(`Updater // Error: ${msg}`);
+          console.error("Update check failed:", updateErr);
+        }
+      }
+    };
 
     const init = async () => {
       try {
-        // Skip update check in dev mode (binary has no real version to compare)
-        if (!import.meta.env.DEV) {
-          try {
-            addLog("Updater // Checking for updates...");
-            const update = await check();
-            if (update && active) {
-              await getCurrentWindow().show();
-              await getCurrentWindow().setFocus();
-              addLog(`Updater // New version available: ${update.version}. Downloading...`);
-              setUpdateStatus("Downloading update...");
-              setUpdateProgress(0);
-              let downloaded = 0;
-              let total = 0;
-              await update.downloadAndInstall((event) => {
-                if (event.event === 'Started') {
-                  total = event.data.contentLength || 0;
-                } else if (event.event === 'Progress') {
-                  downloaded += event.data.chunkLength;
-                  const pct = total > 0 ? Math.round((downloaded / total) * 100) : 0;
-                  setUpdateProgress(pct);
-                  setUpdateStatus(`Downloading update: ${pct}%`);
-                } else if (event.event === 'Finished') {
-                  setUpdateStatus("Update finished. Restarting...");
-                }
-              });
-              addLog("Updater // Installation successful. Relaunching...");
-              await relaunch();
-              return;
-            } else {
-              addLog("Updater // No updates available. Running latest version.");
-            }
-          } catch (updateErr) {
-            const msg = updateErr instanceof Error ? updateErr.message : String(updateErr);
-            addLog(`Updater // Error: ${msg}`);
-            console.error("Update check failed:", updateErr);
-          }
-        }
+        await runUpdateCheck();
 
         const appVersion = await getVersion();
         setVersion(appVersion);
@@ -158,6 +161,14 @@ export default function App() {
           if (active) setVisible(false);
         }, 300);
 
+        // Check for updates every hour after the initial startup check
+        if (!import.meta.env.DEV) {
+          const ONE_HOUR = 60 * 60 * 1000;
+          updateIntervalId = setInterval(() => {
+            if (active) runUpdateCheck();
+          }, ONE_HOUR);
+        }
+
       } catch (err) {
         console.error("Initialization error:", err);
       }
@@ -167,6 +178,7 @@ export default function App() {
 
     return () => {
       active = false;
+      if (updateIntervalId !== null) clearInterval(updateIntervalId);
       for (const unsub of unlisteners) {
         unsub();
       }
