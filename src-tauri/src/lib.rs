@@ -438,9 +438,10 @@ pub fn run() {
                 .item(&quit_i)
                 .build()?;
 
-            let _tray = TrayIconBuilder::with_id("sombra-tray")
+            let tray = TrayIconBuilder::with_id("sombra-tray")
                 .menu(&menu)
                 .show_menu_on_left_click(false)
+                .tooltip("Sombra - Overwatch Region Selector")
                 .icon(app.default_window_icon().unwrap().clone())
                 .on_menu_event(|app, event| {
                     match event.id.as_ref() {
@@ -457,15 +458,27 @@ pub fn run() {
                     }
                 })
                 .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::DoubleClick { .. } = event {
-                        let app = tray.app_handle();
-                        if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.show();
-                            let _ = w.set_focus();
+                    match event {
+                        TrayIconEvent::Click { button: tauri::tray::MouseButton::Left, button_state: tauri::tray::MouseButtonState::Up, .. } => {
+                            let app = tray.app_handle();
+                            if let Some(w) = app.get_webview_window("main") {
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                            }
                         }
+                        TrayIconEvent::DoubleClick { .. } => {
+                            let app = tray.app_handle();
+                            if let Some(w) = app.get_webview_window("main") {
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                            }
+                        }
+                        _ => {}
                     }
                 })
                 .build(app)?;
+            // Keep tray alive for the lifetime of the app
+            app.manage(tray);
 
             let state_for_autostart = state_clone.clone();
             let handle_for_autostart = handle_clone.clone();

@@ -6,11 +6,14 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { enable, disable } from "@tauri-apps/plugin-autostart";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { getVersion } from '@tauri-apps/api/app';
 import {
   Activity, ShieldCheck, Lock, Trash2, Cpu, RefreshCw, Route, Terminal, Server, Copy, Minus, X, Settings
 } from "lucide-react";
+
 import "./App.css";
 import logo from "./assets/icon.png";
+
 
 interface ServerState {
   name: string;
@@ -55,6 +58,8 @@ export default function App() {
   const terminalEndRef = useRef<HTMLDivElement>(null);
   const storeRef = useRef<any>(null);
 
+  const [version, setVersion] = useState("");
+
   useEffect(() => {
     let active = true;
     let unlisteners: (() => void)[] = [];
@@ -92,6 +97,9 @@ export default function App() {
         } catch (updateErr) {
           console.error("Update check failed:", updateErr);
         }
+
+        const appVersion = await getVersion();
+        setVersion(appVersion);
 
         const store = await Store.load("settings.json");
         if (!active) return;
@@ -296,6 +304,7 @@ export default function App() {
     await getCurrentWindow().hide();
   };
 
+
   return (
     <div className="flex flex-col w-full h-full bg-slate-950 text-slate-100 select-none relative overflow-hidden">
       {visible && (
@@ -312,8 +321,8 @@ export default function App() {
             </span>
             {updateProgress >= 0 && (
               <div className="w-48 h-1 bg-slate-900 rounded-full mt-4 overflow-hidden border border-slate-800">
-                <div 
-                  className="h-full bg-violet-500 transition-all duration-300 shadow-[0_0_8px_rgba(139,92,246,0.5)]" 
+                <div
+                  className="h-full bg-violet-500 transition-all duration-300 shadow-[0_0_8px_rgba(139,92,246,0.5)]"
                   style={{ width: `${updateProgress}%` }}
                 />
               </div>
@@ -322,7 +331,7 @@ export default function App() {
         </div>
       )}
 
-      
+
       <div
         className="flex justify-between items-center h-8 bg-slate-900/60 border-b border-slate-800/60 px-3 shrink-0"
         data-tauri-drag-region
@@ -330,7 +339,7 @@ export default function App() {
         <div className="flex items-center gap-2" data-tauri-drag-region>
           <img src={logo} alt="Sombra Logo" className="w-3.5 h-3.5 pointer-events-none" />
           <span className="text-[10px] font-mono font-bold tracking-wider text-slate-400 uppercase pointer-events-none" data-tauri-drag-region>
-            SOMBRA 
+            SOMBRA  v{version}
           </span>
         </div>
         <div className="flex items-center gap-1">
@@ -358,9 +367,9 @@ export default function App() {
         </div>
       </div>
 
-      
+
       <div className="flex flex-col flex-1 p-4 gap-4 min-h-0">
-        
+
         <header className="flex justify-between items-center h-14 px-4 bg-slate-900 border border-slate-800 rounded-lg shadow-md shrink-0">
           <div className="flex items-center gap-3">
             <div className="flex items-center justify-center w-8 h-8 rounded bg-violet-600/10 border border-violet-500/30">
@@ -377,7 +386,7 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2">
-            
+
             <div className={`flex items-center gap-1.5 px-3 py-1 rounded border font-mono text-[9px] font-semibold transition-all duration-300 ${appState?.is_admin
               ? "text-emerald-400 border-emerald-500/20 bg-emerald-500/5 shadow-[0_0_10px_rgba(16,185,129,0.03)]"
               : "text-rose-400 border-rose-500/20 bg-rose-500/5"
@@ -395,7 +404,7 @@ export default function App() {
               )}
             </div>
 
-            
+
             <div className="flex items-center gap-1.5 px-3 py-1 rounded border border-violet-500/20 bg-violet-500/5 text-violet-400 font-mono text-[9px] font-semibold shadow-[0_0_10px_rgba(139,92,246,0.03)]">
               <Route size={11} className="text-violet-400" />
               <span>MODE: {appState ? appState.mode.toUpperCase().replace("AUTO", "AUTO // ") : "LOADING..."}</span>
@@ -403,10 +412,10 @@ export default function App() {
           </div>
         </header>
 
-        
+
         <main className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0">
 
-          
+
           <section className="lg:col-span-7 flex flex-col h-full bg-slate-900 border border-slate-800 rounded-lg p-4 min-h-0 shadow-md">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3 mb-3">
               <div className="flex items-center gap-2">
@@ -416,7 +425,7 @@ export default function App() {
                 </h2>
               </div>
 
-              
+
               <div className="flex gap-1.5">
                 {regions.map((r) => (
                   <button
@@ -433,7 +442,7 @@ export default function App() {
               </div>
             </div>
 
-            
+
             <div className="overflow-y-auto flex-1 min-h-0 pr-1">
               <table className="w-full border-collapse">
                 <thead>
@@ -503,7 +512,7 @@ export default function App() {
             </div>
           </section>
 
-          
+
           <section className="lg:col-span-5 flex flex-col h-full bg-slate-900 border border-slate-800 rounded-lg p-4 min-h-0 shadow-md">
             <div className="flex items-center gap-2 border-b border-slate-800 pb-3 mb-4 shrink-0">
               <Cpu size={14} className="text-violet-400" />
@@ -513,7 +522,7 @@ export default function App() {
             </div>
 
             <div className="flex flex-col flex-1 overflow-y-auto pr-1">
-              
+
               <div className="mb-4">
                 <div className="flex justify-between items-center mb-2">
                   <span className="block font-mono text-[9px] font-semibold text-slate-500 tracking-wider">
@@ -536,7 +545,7 @@ export default function App() {
                   )}
                 </div>
 
-                
+
                 <div className="flex bg-slate-950 p-1 rounded-lg border border-slate-800 relative w-full mb-3.5">
                   <button
                     onClick={() => handleSetMode("Manual")}
@@ -558,7 +567,7 @@ export default function App() {
                   </button>
                 </div>
 
-                
+
                 {appState?.mode !== "Manual" && (
                   <div className="flex flex-col gap-1.5 mb-2.5 animate-fadeIn">
                     <span className="block font-mono text-[9px] font-semibold text-slate-500 tracking-wider">
@@ -591,7 +600,7 @@ export default function App() {
                 )}
               </div>
 
-              
+
               {appState?.tunneling_path && (
                 <div className="text-[8.5px] font-mono text-slate-500 truncate px-2.5 bg-slate-950/40 py-1.5 rounded border border-slate-800/50 mb-4">
                   <span className="text-violet-400 font-semibold">BOUND TO: </span>
@@ -600,7 +609,7 @@ export default function App() {
               )}
             </div>
 
-            
+
             <div className="mt-auto bg-slate-950/50 border border-slate-800/80 rounded-lg p-3 flex flex-col gap-2.5">
               <div className="flex flex-col gap-0.5 text-[10px] text-slate-400">
                 <span className="font-bold text-slate-200 text-xs flex items-center gap-1.5">
@@ -631,7 +640,7 @@ export default function App() {
           </section>
         </main>
 
-        
+
         <footer className="h-40 flex flex-col bg-slate-900 border border-slate-800 rounded-lg p-3 shadow-md shrink-0">
           <div className="flex justify-between items-center border-b border-slate-800 pb-2 mb-2">
             <div className="flex items-center gap-2">
@@ -681,14 +690,14 @@ export default function App() {
             >
               <X size={16} />
             </button>
-            
+
             <div className="flex items-center gap-2 border-b border-slate-800 pb-3 mb-4">
               <Settings size={14} className="text-violet-400" />
               <h2 className="text-xs font-bold tracking-widest text-slate-100 font-mono uppercase">
-                SYSTEM PROTOCOLS 
+                SYSTEM PROTOCOLS
               </h2>
             </div>
-            
+
             <div className="flex flex-col gap-4 text-xs font-mono">
               <div className="flex items-center justify-between bg-slate-950/40 p-3 rounded border border-slate-800/80">
                 <div className="flex flex-col gap-0.5">
