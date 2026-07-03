@@ -417,7 +417,7 @@ pub fn run() {
         tauri::async_runtime::block_on(async { shared_state.app.lock().await.autostart_mode.clone() })
     ));
 
-    tauri::Builder::default()
+    let tauri_app = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             let _ = app.get_webview_window("main").map(|w| {
                 let _ = w.show();
@@ -719,8 +719,19 @@ pub fn run() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    tauri_app.run(|_app_handle, event| {
+        if let tauri::RunEvent::Exit = event {
+            logger::info("Sombra application exiting. Cleaning up firewall rules...");
+            if let Err(e) = firewall::delete_sombra_rules() {
+                logger::error(&format!("Failed to clean up firewall rules on exit: {:?}", e));
+            } else {
+                logger::info("Firewall rules successfully cleaned up on exit.");
+            }
+        }
+    });
 }
 
 fn find_overwatch_pid() -> Option<u32> {
