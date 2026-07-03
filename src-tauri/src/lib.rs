@@ -417,6 +417,7 @@ pub fn run() {
             let _ = app.get_webview_window("main").map(|w| {
                 let _ = w.show();
                 let _ = w.set_focus();
+                let _ = w.emit("restore-position", ());
             });
         }))
         .plugin(tauri_plugin_opener::init())
@@ -474,6 +475,7 @@ pub fn run() {
                             if let Some(w) = app.get_webview_window("main") {
                                 let _ = w.show();
                                 let _ = w.set_focus();
+                                let _ = w.emit("restore-position", ());
                             }
                         }
                         "quit" => {
@@ -489,6 +491,7 @@ pub fn run() {
                             if let Some(w) = app.get_webview_window("main") {
                                 let _ = w.show();
                                 let _ = w.set_focus();
+                                let _ = w.emit("restore-position", ());
                             }
                         }
                         TrayIconEvent::DoubleClick { .. } => {
@@ -496,6 +499,7 @@ pub fn run() {
                             if let Some(w) = app.get_webview_window("main") {
                                 let _ = w.show();
                                 let _ = w.set_focus();
+                                let _ = w.emit("restore-position", ());
                             }
                         }
                         _ => {}

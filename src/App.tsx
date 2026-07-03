@@ -2,7 +2,8 @@ import { useEffect, useState, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Store } from "@tauri-apps/plugin-store";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { getCurrentWindow, availableMonitors, type Monitor } from "@tauri-apps/api/window";
+import { PhysicalPosition } from "@tauri-apps/api/dpi";
 import { enable, disable } from "@tauri-apps/plugin-autostart";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch, exit } from "@tauri-apps/plugin-process";
@@ -132,6 +133,54 @@ export default function App() {
         setAutostartMode(stateData.autostart_mode);
         addLog(`Loaded state. Mode: ${stateData.mode}. Admin: ${stateData.is_admin}`);
 
+        // --- Window position persistence ---
+        const restoreWindowPosition = async () => {
+          try {
+            const saved = await store.get<{ x: number; y: number }>("window_position");
+            if (saved && typeof saved.x === "number" && typeof saved.y === "number") {
+              // Verify the saved position is within an available monitor
+              const monitors = await availableMonitors();
+              const inBounds = monitors.some((m: Monitor) => {
+                const mx = m.position.x;
+                const my = m.position.y;
+                const mw = m.size.width;
+                const mh = m.size.height;
+                return saved.x >= mx && saved.x < mx + mw && saved.y >= my && saved.y < my + mh;
+              });
+              if (inBounds) {
+                await getCurrentWindow().setPosition(new PhysicalPosition(saved.x, saved.y));
+              }
+            }
+          } catch (e) {
+            console.warn("Failed to restore window position:", e);
+          }
+        };
+
+        await restoreWindowPosition();
+
+        let moveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+        const unlistenMove = await getCurrentWindow().listen("tauri://move", async () => {
+          if (moveDebounceTimer) clearTimeout(moveDebounceTimer);
+          moveDebounceTimer = setTimeout(async () => {
+            try {
+              const pos = await getCurrentWindow().outerPosition();
+              const st = storeRef.current;
+              if (st) {
+                await st.set("window_position", { x: pos.x, y: pos.y });
+                await st.save();
+              }
+            } catch (e) {
+              console.warn("Failed to save window position:", e);
+            }
+          }, 500);
+        });
+        unlisteners.push(unlistenMove);
+
+        const unlistenRestorePos = await getCurrentWindow().listen("restore-position", async () => {
+          await restoreWindowPosition();
+        });
+        unlisteners.push(unlistenRestorePos);
+        // ------------------------------------
 
         const unlistenServers = await listen<ServerState[]>("servers-update", (event) => {
           setServers(event.payload);
