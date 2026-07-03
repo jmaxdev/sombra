@@ -117,6 +117,11 @@ async fn get_servers(state: State<'_, AppState>) -> Result<Vec<ServerState>, Str
 }
 
 #[tauri::command]
+fn is_game_running() -> bool {
+    find_overwatch_pid().is_some()
+}
+
+#[tauri::command]
 async fn get_app_state(state: State<'_, AppState>) -> Result<AppStatePayload, String> {
     let app = state.app.lock().await;
     Ok(AppStatePayload {
@@ -435,7 +440,8 @@ pub fn run() {
             unblock_all,
             block_all,
             find_best_server,
-            save_autostart_settings
+            save_autostart_settings,
+            is_game_running
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
