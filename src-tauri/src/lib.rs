@@ -419,6 +419,14 @@ pub fn run() {
             find_best_server,
             save_autostart_settings
         ])
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // Always hide the window instead of closing it.
+                // The user can quit from the tray icon menu.
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
         .setup(|app| {
             let handle_clone = app.handle().clone();
             let state_clone = app.state::<AppState>().app.clone();
