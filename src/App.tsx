@@ -49,6 +49,23 @@ if (!import.meta.env.DEV) {
   document.addEventListener("contextmenu", (e) => e.preventDefault(), true);
 }
 
+const TELEMETRY_DAYS = 7;
+const TELEMETRY_DURATION_MS = TELEMETRY_DAYS * 24 * 60 * 60 * 1000;
+
+const formatRemainingTime = (remainingMs: number): string => {
+  const days = Math.floor(remainingMs / (24 * 3600 * 1000));
+  const hours = Math.floor((remainingMs % (24 * 3600 * 1000)) / (3600 * 1000));
+  const minutes = Math.floor((remainingMs % (3600 * 1000)) / (60 * 1000));
+  
+  const parts: string[] = [];
+  if (days > 0) {
+    parts.push(`${days}d`);
+  }
+  parts.push(`${hours}h`);
+  parts.push(`${minutes}m`);
+  return parts.join(" ");
+};
+
 export default function App() {
   const [servers, setServers] = useState<ServerState[]>([]);
   const [appState, setAppState] = useState<AppStatePayload | null>(null);
@@ -131,14 +148,12 @@ export default function App() {
           firstRun = Date.now();
           await store.set("first_run_time", firstRun);
           await store.save();
-          addLog("Telemetry recording started. Best play window will generate in 24 hours.");
+          addLog(`Telemetry recording started. Best play window will generate in ${TELEMETRY_DAYS} days.`);
         } else {
           const elapsed = Date.now() - firstRun;
-          if (elapsed < 24 * 3600 * 1000) {
-            const remMs = 24 * 3600 * 1000 - elapsed;
-            const h = Math.floor(remMs / 3600000);
-            const m = Math.floor((remMs % 3600000) / 60000);
-            addLog(`Telemetry recording active. ${h}h ${m}m remaining to generate best play window.`);
+          if (elapsed < TELEMETRY_DURATION_MS) {
+            const remMs = TELEMETRY_DURATION_MS - elapsed;
+            addLog(`Telemetry recording active. ${formatRemainingTime(remMs)} remaining to generate best play window.`);
           } else {
             addLog("Telemetry data loaded. Recommended playing window active.");
           }
@@ -941,10 +956,9 @@ export default function App() {
         const averageHistorical = hourlyData.reduce((a, b) => a + b, 0) / 24;
         const goodHours = hourlyData.map((v, h) => ({ v, h })).filter(x => x.v < averageHistorical).map(x => x.h);
 
-        const remainingMs = firstRunTime ? Math.max(0, (firstRunTime + 24 * 60 * 60 * 1000) - Date.now()) : 24 * 60 * 60 * 1000;
+        const remainingMs = firstRunTime ? Math.max(0, (firstRunTime + TELEMETRY_DURATION_MS) - Date.now()) : TELEMETRY_DURATION_MS;
         const isTelemetryGatheringActive = firstRunTime === null || remainingMs > 0;
-        const remainingHours = Math.floor(remainingMs / (3600 * 1000));
-        const remainingMinutes = Math.floor((remainingMs % (3600 * 1000)) / (60 * 1000));
+        const remainingTimeStr = formatRemainingTime(remainingMs);
         
         const formatRecommendedHours = (hours: number[]) => {
           if (hours.length === 0) return "N/A";
@@ -1124,7 +1138,7 @@ export default function App() {
                     <div className="flex flex-col items-center justify-center h-24 bg-slate-950/40 border border-slate-800/80 p-3 rounded-lg text-center font-mono">
                       <RefreshCw size={14} className="animate-spin text-violet-400 mb-2" />
                       <span className="text-[10px] text-slate-400 font-bold tracking-wider">ANALYZING NETWORK PROFILE</span>
-                      <span className="text-[9px] text-slate-500 mt-1">Recording hourly latency baseline. Available in {remainingHours}h {remainingMinutes}m.</span>
+                      <span className="text-[9px] text-slate-500 mt-1">Recording hourly latency baseline. Available in {remainingTimeStr}.</span>
                     </div>
                   ) : (
                     <div className="flex items-end justify-between h-24 bg-slate-950/40 border border-slate-800/80 p-3 rounded-lg gap-[2px]">
@@ -1168,7 +1182,7 @@ export default function App() {
                       <div className="flex flex-col gap-0.5">
                         <span className="text-slate-400">Recommended playing window:</span>
                         <span className="text-amber-400 font-bold">COLLECTING DATA...</span>
-                        <span className="text-slate-500">Generating optimal schedule in {remainingHours}h {remainingMinutes}m (requires 24 hours of logs).</span>
+                        <span className="text-slate-500">Generating optimal schedule in {remainingTimeStr} (requires {TELEMETRY_DAYS} days of logs).</span>
                       </div>
                     </div>
                   ) : (
