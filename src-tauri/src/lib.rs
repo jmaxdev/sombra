@@ -41,6 +41,7 @@ pub struct AppStatePayload {
     pub is_admin: bool,
     pub autostart_enabled: bool,
     pub autostart_mode: String,
+    pub tcp_region: Option<String>,
 }
 
 fn check_is_admin() -> bool {
@@ -131,7 +132,37 @@ async fn get_app_state(state: State<'_, AppState>) -> Result<AppStatePayload, St
         is_admin: state.is_admin,
         autostart_enabled: app.autostart_enabled,
         autostart_mode: app.autostart_mode.clone(),
+        tcp_region: app.tcp_region.clone(),
     })
+}
+
+#[tauri::command]
+async fn save_tcp_settings(
+    tcp_region: Option<String>,
+    state: State<'_, AppState>,
+    app_handle: AppHandle,
+) -> Result<(), String> {
+    logger::info(&format!(
+        "Command 'save_tcp_settings' received to set TCP region: {:?}",
+        tcp_region
+    ));
+    if !state.is_admin {
+        logger::error("Command 'save_tcp_settings' failed: administrator privileges required.");
+        return Err("Administrator privileges required to change settings.".to_string());
+    }
+    {
+        let mut app = state.app.lock().await;
+        app.tcp_region = tcp_region;
+        app.save_settings().map_err(|e| {
+            logger::error(&format!("Error applying TCP settings: {}", e));
+            e.to_string()
+        })?;
+        let _ = app_handle.emit("servers-update", app.servers.clone());
+        let _ = app_handle.emit("status-message", app.status_message.clone());
+        logger::info(&format!("TCP settings updated. Status: {}", app.status_message));
+    }
+    spawn_immediate_ping(state.app.clone(), app_handle);
+    Ok(())
 }
 
 #[tauri::command]
@@ -441,7 +472,8 @@ pub fn run() {
             block_all,
             find_best_server,
             save_autostart_settings,
-            is_game_running
+            is_game_running,
+            save_tcp_settings
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

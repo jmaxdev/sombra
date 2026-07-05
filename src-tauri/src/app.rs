@@ -32,6 +32,8 @@ pub struct AppConfig {
     pub blocked_servers: Vec<String>,
     pub autostart_enabled: bool,
     pub autostart_mode: String,
+    #[serde(default)]
+    pub tcp_region: Option<String>,
 }
 
 impl Default for AppConfig {
@@ -41,6 +43,7 @@ impl Default for AppConfig {
             blocked_servers: Vec::new(),
             autostart_enabled: false,
             autostart_mode: "normal".to_string(),
+            tcp_region: None,
         }
     }
 }
@@ -54,6 +57,7 @@ pub struct App {
     pub auto_routed: bool,
     pub autostart_enabled: bool,
     pub autostart_mode: String,
+    pub tcp_region: Option<String>,
 }
 
 /// Helper to auto-detect running Overwatch 2 executable path using PowerShell
@@ -118,6 +122,7 @@ impl App {
             auto_routed: false,
             autostart_enabled: false,
             autostart_mode: "normal".to_string(),
+            tcp_region: None,
         }
     }
 
@@ -136,6 +141,7 @@ impl App {
         self.mode = config.mode;
         self.autostart_enabled = config.autostart_enabled;
         self.autostart_mode = config.autostart_mode.clone();
+        self.tcp_region = config.tcp_region.clone();
 
         for server in &mut self.servers {
             server.is_blocked = config
@@ -146,8 +152,8 @@ impl App {
         let blocked_count = config.blocked_servers.len();
         self.status_message = "Settings loaded from firewall description.".to_string();
         crate::logger::info(&format!(
-            "Loaded settings: Mode = {:?}, Tunneling = {:?}, Blocked servers count = {}",
-            self.mode, self.tunneling_path, blocked_count
+            "Loaded settings: Mode = {:?}, Tunneling = {:?}, Blocked servers count = {}, TCP Region = {:?}",
+            self.mode, self.tunneling_path, blocked_count, self.tcp_region
         ));
         Ok(())
     }
@@ -175,6 +181,7 @@ impl App {
             blocked_servers: blocked_servers.clone(),
             autostart_enabled: self.autostart_enabled,
             autostart_mode: self.autostart_mode.clone(),
+            tcp_region: self.tcp_region.clone(),
         };
 
         let json_str = serde_json::to_string(&config)?;
@@ -188,12 +195,28 @@ impl App {
 
         let blocked_ips = blocked_cidrs.join(",");
 
+        let blocked_tcp_ips = if let Some(ref target_desc) = self.tcp_region {
+            if target_desc.is_empty() || target_desc.eq_ignore_ascii_case("auto") {
+                "".to_string()
+            } else {
+                let tcp_blocked_cidrs: Vec<&str> = self
+                    .servers
+                    .iter()
+                    .filter(|s| s.description != target_desc)
+                    .map(|s| s.cidrs.as_str())
+                    .collect();
+                tcp_blocked_cidrs.join(",")
+            }
+        } else {
+            "".to_string()
+        };
+
         crate::logger::info(&format!(
-            "Saving settings: Mode = {:?}, Tunneling = {:?}, Blocked servers = {:?}",
-            self.mode, self.tunneling_path, blocked_servers
+            "Saving settings: Mode = {:?}, Tunneling = {:?}, Blocked servers = {:?}, TCP Region = {:?}",
+            self.mode, self.tunneling_path, blocked_servers, self.tcp_region
         ));
 
-        firewall::apply_rules(&json_str, &blocked_ips, self.tunneling_path.as_deref())?;
+        firewall::apply_rules(&json_str, &blocked_ips, &blocked_tcp_ips, self.tunneling_path.as_deref())?;
         self.status_message = "Firewall rules applied successfully!".to_string();
         Ok(())
     }

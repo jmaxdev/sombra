@@ -146,12 +146,13 @@ pub fn delete_sombra_rules() -> Result<()> {
 pub fn apply_rules(
     description: &str,
     blocked_ips: &str,
+    blocked_tcp_ips: &str,
     tunneling_path: Option<&str>,
 ) -> Result<()> {
     let _ = initialize_com();
     crate::logger::info(&format!(
-        "Applying firewall rules. Path: {:?}, Blocked IPs: {}",
-        tunneling_path, blocked_ips
+        "Applying firewall rules. Path: {:?}, Blocked IPs: {}, Blocked TCP IPs: {}",
+        tunneling_path, blocked_ips, blocked_tcp_ips
     ));
 
     let res = (|| -> Result<()> {
@@ -195,6 +196,33 @@ pub fn apply_rules(
 
             // Add the configured rule to the system
             rules.Add(&new_rule)?;
+
+            // 3. Create a TCP block rule if we have blocked TCP IPs
+            if !blocked_tcp_ips.trim().is_empty() {
+                let new_rule_tcp: INetFwRule =
+                    CoCreateInstance(&NetFwRule, None, CLSCTX_INPROC_SERVER)?;
+
+                new_rule_tcp.SetName(&BSTR::from("sombra/rules-tcp"))?;
+                new_rule_tcp.SetGrouping(&BSTR::from(RULE_GROUP))?;
+                new_rule_tcp.SetDescription(&BSTR::from("Sombra TCP block rule"))?;
+
+                // Protocol TCP = 6
+                new_rule_tcp.SetProtocol(6)?;
+                new_rule_tcp.SetDirection(NET_FW_RULE_DIR_OUT)?;
+                new_rule_tcp.SetAction(NET_FW_ACTION_BLOCK)?;
+                new_rule_tcp.SetProfiles(0x7FFFFFFF)?;
+
+                if let Some(app_path) = tunneling_path {
+                    if !app_path.trim().is_empty() {
+                        new_rule_tcp.SetApplicationName(&BSTR::from(app_path))?;
+                    }
+                }
+
+                new_rule_tcp.SetRemoteAddresses(&BSTR::from(blocked_tcp_ips))?;
+                new_rule_tcp.SetEnabled(VARIANT_BOOL::from(true))?;
+
+                rules.Add(&new_rule_tcp)?;
+            }
         }
         Ok(())
     })();

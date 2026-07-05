@@ -42,6 +42,7 @@ interface AppStatePayload {
   is_admin: boolean;
   autostart_enabled: boolean;
   autostart_mode: string;
+  tcp_region: string | null;
 }
 
 // Disable right-click context menu in production builds
@@ -77,6 +78,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [autostartEnabled, setAutostartEnabled] = useState(false);
   const [autostartMode, setAutostartMode] = useState("normal");
+  const [tcpRegion, setTcpRegion] = useState<string | null>(null);
   const [updateStatus, setUpdateStatus] = useState("");
   const [updateProgress, setUpdateProgress] = useState(-1);
   const terminalEndRef = useRef<HTMLDivElement>(null);
@@ -171,6 +173,7 @@ export default function App() {
         setAppState(stateData);
         setAutostartEnabled(stateData.autostart_enabled);
         setAutostartMode(stateData.autostart_mode);
+        setTcpRegion(stateData.tcp_region);
         addLog(`Loaded state. Mode: ${stateData.mode}. Admin: ${stateData.is_admin}`);
 
         // --- Window position persistence ---
@@ -362,6 +365,19 @@ export default function App() {
       addLog(`Settings // Autostart mode set to: ${mode}`);
     } catch (err) {
       addLog(`Settings Error // Failed to update autostart mode: ${err}`);
+    }
+  };
+
+  const handleSaveTcpRegion = async (region: string) => {
+    try {
+      const val = region === "auto" ? null : region;
+      setTcpRegion(val);
+      addLog(`Settings // Lobby Server (TCP) set to: ${region === "auto" ? "AUTO" : region}`);
+      await invoke("save_tcp_settings", { tcpRegion: val });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      addLog(`Settings Error // Failed to save TCP Region: ${msg}`);
+      console.error(err);
     }
   };
 
@@ -905,6 +921,34 @@ export default function App() {
                   </div>
                 </div>
               )}
+
+              <div className="flex flex-col gap-2 bg-slate-950/40 p-3 rounded border border-slate-800/80 font-sans">
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-bold text-slate-200 text-xs uppercase">Lobby Server (TCP)</span>
+                  <span className="text-[10px] text-slate-400 leading-normal">
+                    Configure which region's matchmaking/lobby servers to allow. Other TCP lobby regions will be blocked.
+                  </span>
+                </div>
+                <select
+                  value={tcpRegion || "auto"}
+                  onChange={(e) => handleSaveTcpRegion(e.target.value)}
+                  disabled={!appState?.is_admin}
+                  className="mt-1 w-full bg-slate-950/80 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-300 font-sans focus:outline-none focus:border-violet-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <option value="auto">AUTO (Recommended / No blocks)</option>
+                  {servers.map((s) => (
+                    <option key={s.description} value={s.description}>
+                      {s.name} ({s.description})
+                    </option>
+                  ))}
+                </select>
+                <div className="mt-1 flex items-start gap-1.5 text-[10px] text-amber-500/90 leading-normal">
+                  <AlertTriangle size={12} className="shrink-0 mt-0.5" />
+                  <span>
+                    Warning: Forcing a specific TCP lobby can cause longer loading screens or connection errors. Use AUTO for best performance.
+                  </span>
+                </div>
+              </div>
             </div>
 
             <div className="mt-5 border-t border-slate-800 pt-3 flex justify-end">
