@@ -11,6 +11,7 @@ pub enum OperationMode {
     AutoUSA,
     AutoEurope,
     AutoAsia,
+    AutoAustralia,
 }
 
 impl std::fmt::Display for OperationMode {
@@ -22,6 +23,7 @@ impl std::fmt::Display for OperationMode {
             OperationMode::AutoUSA => write!(f, "Auto (USA)"),
             OperationMode::AutoEurope => write!(f, "Auto (Europe)"),
             OperationMode::AutoAsia => write!(f, "Auto (Asia)"),
+            OperationMode::AutoAustralia => write!(f, "Auto (Australia)"),
         }
     }
 }
@@ -292,6 +294,13 @@ impl App {
                 .filter(|(_, s)| s.region == "Asia")
                 .map(|(i, _)| i)
                 .collect(),
+            OperationMode::AutoAustralia => self
+                .servers
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.region == "Australia")
+                .map(|(i, _)| i)
+                .collect(),
         };
 
         if candidates.is_empty() {
@@ -332,6 +341,11 @@ impl App {
                     .servers
                     .iter()
                     .position(|s| s.description == "GTK1")
+                    .unwrap_or(0),
+                OperationMode::AutoAustralia => self
+                    .servers
+                    .iter()
+                    .position(|s| s.description == "SYD2")
                     .unwrap_or(0),
                 _ => self
                     .servers

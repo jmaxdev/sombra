@@ -125,13 +125,6 @@ pub static SERVERS: &[Server] = &[
         cidrs: "158.115.196.0/23",
         region: "Australia",
     },
-    Server {
-        name: "Saudi Arabia",
-        description: "GMEC2",
-        ping_ip: "34.166.0.84",
-        cidrs: "8.228.192.0/19,8.230.64.0/19,34.1.48.0/20,34.152.84.0/23,34.152.102.0/24,34.157.122.128/25,34.157.218.128/25,34.166.0.0/16,34.177.48.0/23,34.177.70.0/24,34.183.69.0/24,34.184.68.0/24,35.252.32.0/19,2600:1900:5400::/44",
-        region: "Middle East",
-    },
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

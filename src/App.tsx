@@ -10,7 +10,7 @@ import { relaunch, exit } from "@tauri-apps/plugin-process";
 import { getVersion } from '@tauri-apps/api/app';
 import {
   Activity, ShieldCheck, Lock, Trash2, Cpu, RefreshCw, Route, Terminal, Server, Copy, Minus, X, Settings,
-  Clock, TrendingUp, AlertTriangle
+  TrendingUp
 } from "lucide-react";
 
 import "./App.css";
@@ -33,7 +33,8 @@ type OperationMode =
   | "AutoSA"
   | "AutoUSA"
   | "AutoEurope"
-  | "AutoAsia";
+  | "AutoAsia"
+  | "AutoAustralia";
 
 interface AppStatePayload {
   mode: OperationMode;
@@ -85,7 +86,6 @@ export default function App() {
   const [selectedServerForModal, setSelectedServerForModal] = useState<ServerState | null>(null);
   const [latencyHistory, setLatencyHistory] = useState<Record<string, number[]>>({});
   const [isGameRunning, setIsGameRunning] = useState(false);
-  const [firstRunTime, setFirstRunTime] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -156,7 +156,7 @@ export default function App() {
             addLog("Telemetry data loaded. Recommended playing window active.");
           }
         }
-        setFirstRunTime(firstRun);
+
 
         addLog("Sombra console initialized. Ready.");
 
@@ -591,7 +591,7 @@ export default function App() {
                     <th className="font-mono text-xs text-slate-500 font-semibold px-3 py-2">REGION</th>
                     <th className="font-mono text-xs text-slate-500 font-semibold px-3 py-2">NODE</th>
                     <th className="font-mono text-xs text-slate-500 font-semibold px-3 py-2">IDENT</th>
-                    <th className="font-mono text-xs text-slate-500 font-semibold px-3 py-2">LATENCY</th>
+                    <th className="font-mono text-xs text-slate-500 font-semibold px-3 py-2">LATENCY (MIN)</th>
                     <th className="font-mono text-xs text-slate-500 font-semibold px-3 py-2 text-right">STATUS</th>
                   </tr>
                 </thead>
@@ -718,13 +718,14 @@ export default function App() {
                     <span className="block font-mono text-xs font-semibold text-slate-500 tracking-wider">
                       AUTO ROUTING TARGET REGION
                     </span>
-                    <div className="grid grid-cols-5 gap-1.5 bg-slate-950/40 p-1 border border-slate-800/80 rounded-md">
+                    <div className="grid grid-cols-6 gap-1.5 bg-slate-950/40 p-1 border border-slate-800/80 rounded-md">
                       {([
                         { mode: "AutoGlobal", label: "GLOBAL" },
                         { mode: "AutoSA", label: "S.A." },
                         { mode: "AutoUSA", label: "USA" },
                         { mode: "AutoEurope", label: "EU" },
-                        { mode: "AutoAsia", label: "ASIA" }
+                        { mode: "AutoAsia", label: "ASIA" },
+                        { mode: "AutoAustralia", label: "AUS" }
                       ] as const).map((item) => {
                         const isCurrentRegion = appState?.mode === item.mode;
                         return (
@@ -917,65 +918,23 @@ export default function App() {
         const canToggle = !isAutoMode && appState?.is_admin;
         const globalIndex = servers.findIndex((s) => s.description === server.description);
 
-        const hourlyData = getHistoricalHourlyData(server);
-        const currentHour = new Date().getHours();
-        const expectedPing = hourlyData[currentHour];
-        
-        const rtHistory = (() => {
-          const recorded = latencyHistory[server.description] || [];
-          if (recorded.length > 0) return recorded;
-          const base = server.current_ping || (server.region === "South America" ? 40 : server.region === "USA" ? 140 : server.region === "Europe" ? 220 : 290);
-          return [
-            Math.round(base * 0.98),
-            Math.round(base * 1.01),
-            Math.round(base * 0.99),
-            Math.round(base * 1.02),
-            Math.round(base * 0.97),
-            base
-          ];
-        })();
+        const rtHistory = latencyHistory[server.description] || (server.current_ping !== null ? [server.current_ping] : []);
+        const minPing = rtHistory.length > 0 ? Math.min(...rtHistory) : null;
+        const maxPing = rtHistory.length > 0 ? Math.max(...rtHistory) : null;
+        const avgPing = rtHistory.length > 0 ? Math.round(rtHistory.reduce((a, b) => a + b, 0) / rtHistory.length) : null;
+        const jitter = (minPing !== null && maxPing !== null) ? Math.max(0, maxPing - minPing) : 0;
+        const estRtt = avgPing !== null ? (avgPing + 30) : null;
 
-        const rtMax = Math.max(...rtHistory, 1);
-        const rtMin = Math.min(...rtHistory);
+        const rtMax = rtHistory.length > 0 ? Math.max(...rtHistory, 1) : 100;
+        const rtMin = rtHistory.length > 0 ? Math.min(...rtHistory) : 0;
         const rtRange = Math.max(rtMax - rtMin, 15);
         const graphMin = Math.max(0, rtMin - rtRange * 0.1);
         const graphMax = rtMax + rtRange * 0.1;
 
-        const actualPing = server.current_ping;
-        const isHighLatency = actualPing !== null && actualPing > expectedPing * 1.08 && actualPing > expectedPing + 12;
-
-        const averageHistorical = hourlyData.reduce((a, b) => a + b, 0) / 24;
-        const goodHours = hourlyData.map((v, h) => ({ v, h })).filter(x => x.v < averageHistorical).map(x => x.h);
-
-        const remainingMs = firstRunTime ? Math.max(0, (firstRunTime + TELEMETRY_DURATION_MS) - Date.now()) : TELEMETRY_DURATION_MS;
-        const isTelemetryGatheringActive = firstRunTime === null || remainingMs > 0;
-        const remainingTimeStr = formatRemainingTime(remainingMs);
-        
-        const formatRecommendedHours = (hours: number[]) => {
-          if (hours.length === 0) return "N/A";
-          const ranges: string[] = [];
-          let start = hours[0];
-          let prev = hours[0];
-          for (let i = 1; i <= hours.length; i++) {
-            const curr = hours[i];
-            if (curr !== prev + 1 || i === hours.length) {
-              if (start === prev) {
-                ranges.push(`${start.toString().padStart(2, '0')}:00`);
-              } else {
-                ranges.push(`${start.toString().padStart(2, '0')}:00 - ${prev.toString().padStart(2, '0')}:00`);
-              }
-              start = curr;
-            }
-            prev = curr;
-          }
-          return ranges.join(", ");
-        };
-
-        const recommendedHoursStr = formatRecommendedHours(goodHours);
-
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-fadeIn">
-            <div className="w-[500px] bg-slate-900 border border-slate-800 rounded-xl shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="w-[600px] bg-slate-900 border border-slate-800 rounded-xl shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh]">
+              
               <div className="flex items-start justify-between border-b border-slate-800 p-4 bg-slate-950/20">
                 <div className="flex flex-col">
                   <div className="flex items-center gap-2">
@@ -999,82 +958,124 @@ export default function App() {
               </div>
 
               <div className="p-4 overflow-y-auto flex-1 flex flex-col gap-4 text-xs font-sans text-slate-300">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-lg flex flex-col justify-between">
-                    <span className="text-xs font-semibold text-slate-500 font-mono tracking-wider uppercase">
-                      Current Latency
+                
+                <div className="bg-gradient-to-br from-violet-950/30 to-slate-900/50 border border-violet-500/20 p-4 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex flex-col gap-1 flex-1">
+                    <span className="text-xs font-bold text-violet-400 font-mono tracking-wider uppercase">
+                      Estimated In-Game Latency (RTT)
                     </span>
-                    <div className="flex items-baseline gap-1 mt-2">
-                      <span className={`text-3xl font-extrabold tracking-tight ${getPingClass(server.current_ping)}`}>
-                        {server.current_ping !== null ? server.current_ping : "—"}
-                      </span>
-                      <span className="text-xs text-slate-400 font-mono">ms</span>
-                    </div>
+                    <p className="text-[11px] text-slate-400 leading-relaxed max-w-[340px] mt-1">
+                      This represents the round-trip time shown in Overwatch 2, which includes network ping plus ~30ms of game engine, rendering, and server tick overhead.
+                    </p>
                   </div>
-                  
-                  <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-lg flex flex-col justify-between">
-                    <span className="text-xs font-semibold text-slate-500 font-mono tracking-wider uppercase">
-                      Firewall State
+                  <div className="flex items-baseline gap-1 bg-slate-950/50 border border-slate-800/80 px-4 py-3 rounded-lg shrink-0 justify-center">
+                    <span className={`text-4xl font-extrabold tracking-tight ${getPingClass(estRtt)}`}>
+                      {estRtt !== null ? estRtt : "—"}
                     </span>
-                    <div className="flex items-center justify-between mt-2">
-                      <span className={`inline-block font-mono text-[10px] font-bold px-2 py-0.5 rounded border ${
-                        server.is_blocked
-                          ? "text-rose-400 border-rose-500/20 bg-rose-500/5"
-                          : "text-emerald-400 border-emerald-500/20 bg-emerald-500/5"
-                      }`}>
-                        {server.is_blocked ? "BLOCKED" : "UNRESTRICTED"}
-                      </span>
-                      
-                      {canToggle && (
-                        <button
-                          onClick={() => handleToggleServer(globalIndex)}
-                          className={`px-2 py-1 text-xs font-mono font-bold rounded border cursor-pointer transition-all duration-150 ${
-                            server.is_blocked
-                              ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/40"
-                              : "border-rose-500/20 bg-rose-500/5 text-rose-400 hover:bg-rose-500/10 hover:border-rose-500/40"
-                          }`}
-                        >
-                          {server.is_blocked ? "ALLOW" : "BLOCK"}
-                        </button>
-                      )}
-                    </div>
+                    <span className="text-xs text-slate-400 font-mono">ms</span>
                   </div>
                 </div>
 
-                {isHighLatency && (
-                  <div className="bg-amber-500/5 border border-amber-500/30 p-3 rounded-lg flex items-start gap-2.5 animate-fadeIn">
-                    <AlertTriangle className="text-amber-400 shrink-0 mt-0.5" size={14} />
-                    <div className="flex flex-col gap-0.5">
-                      <span className="font-bold text-amber-300 text-xs">
-                        {isGameRunning ? "ACTIVE GAME ALERT: HIGH LATENCY" : "POTENTIAL HIGH LATENCY AT THIS HOUR"}
+                <div className="grid grid-cols-4 gap-2.5">
+                  
+                  <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-lg flex flex-col justify-between">
+                    <span className="text-[10px] font-semibold text-slate-500 font-mono tracking-wider uppercase">
+                      Ping (Min)
+                    </span>
+                    <div className="flex items-baseline gap-0.5 mt-2">
+                      <span className={`text-lg font-bold ${getPingClass(minPing)}`}>
+                        {minPing !== null ? minPing : "—"}
                       </span>
-                      <span className="text-xs text-slate-400 leading-normal">
-                        Current latency ({actualPing} ms) is higher than the historical baseline for this hour (~{expectedPing} ms). Performance might be degraded.
-                      </span>
+                      <span className="text-[10px] text-slate-500 font-mono">ms</span>
                     </div>
                   </div>
-                )}
+
+                  <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-lg flex flex-col justify-between">
+                    <span className="text-[10px] font-semibold text-slate-500 font-mono tracking-wider uppercase">
+                      Ping (Avg)
+                    </span>
+                    <div className="flex items-baseline gap-0.5 mt-2">
+                      <span className={`text-lg font-bold ${getPingClass(avgPing)}`}>
+                        {avgPing !== null ? avgPing : "—"}
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-mono">ms</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-lg flex flex-col justify-between">
+                    <span className="text-[10px] font-semibold text-slate-500 font-mono tracking-wider uppercase">
+                      Ping (Max)
+                    </span>
+                    <div className="flex items-baseline gap-0.5 mt-2">
+                      <span className={`text-lg font-bold ${getPingClass(maxPing)}`}>
+                        {maxPing !== null ? maxPing : "—"}
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-mono">ms</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-lg flex flex-col justify-between">
+                    <span className="text-[10px] font-semibold text-slate-500 font-mono tracking-wider uppercase">
+                      Jitter (Var)
+                    </span>
+                    <div className="flex items-baseline gap-0.5 mt-2">
+                      <span className={`text-lg font-bold ${jitter > 15 ? "text-amber-400" : "text-slate-300"}`}>
+                        {jitter}
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-mono">ms</span>
+                    </div>
+                  </div>
+
+                </div>
+
+                <div className="bg-slate-950/40 border border-slate-800/80 p-3.5 rounded-lg flex items-center justify-between">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[10px] font-semibold text-slate-500 font-mono tracking-wider uppercase">
+                      Firewall State
+                    </span>
+                    <span className={`inline-block font-mono text-[10px] font-bold px-2 py-0.5 rounded border mt-1.5 w-fit ${
+                      server.is_blocked
+                        ? "text-rose-400 border-rose-500/20 bg-rose-500/5"
+                        : "text-emerald-400 border-emerald-500/20 bg-emerald-500/5"
+                    }`}>
+                      {server.is_blocked ? "BLOCKED" : "UNRESTRICTED"}
+                    </span>
+                  </div>
+                  
+                  {canToggle && (
+                    <button
+                      onClick={() => handleToggleServer(globalIndex)}
+                      className={`px-3 py-1.5 text-xs font-mono font-bold rounded border cursor-pointer transition-all duration-150 ${
+                        server.is_blocked
+                          ? "border-emerald-500/20 bg-emerald-500/5 text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-500/40"
+                          : "border-rose-500/20 bg-rose-500/5 text-rose-400 hover:bg-rose-500/10 hover:border-rose-500/40"
+                      }`}
+                    >
+                      {server.is_blocked ? "ALLOW REGION" : "BLOCK REGION"}
+                    </button>
+                  )}
+                </div>
 
                 <div className="flex flex-col gap-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-400 font-mono tracking-wider uppercase flex items-center gap-1.5">
                       <TrendingUp size={14} className="text-violet-400" />
-                      Real-Time Latency Trend
+                      Real-Time Network Ping Trend
                     </span>
-                    <span className="text-[10px] text-slate-400 font-mono">
+                    <span className="text-[10px] text-slate-500 font-mono">
                       Updates every 8s
                     </span>
                   </div>
                   
-                  <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-lg h-28 flex items-center justify-center relative">
+                  <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-lg h-32 flex items-center justify-center relative">
                     {rtHistory.length < 2 ? (
                       <div className="text-xs font-mono text-slate-400 flex items-center gap-2">
                         <RefreshCw size={12} className="animate-spin text-violet-400" />
-                        Acquiring latency readings...
+                        Acquiring real-time network latency readings...
                       </div>
                     ) : (() => {
-                      const width = 430;
-                      const height = 80;
+                      const width = 530;
+                      const height = 90;
                       const points = rtHistory.map((val, idx) => {
                         const x = (idx / (rtHistory.length - 1)) * width;
                         const y = height - ((val - graphMin) / (graphMax - graphMin || 1)) * height;
@@ -1112,71 +1113,38 @@ export default function App() {
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                  <span className="text-xs font-bold text-slate-400 font-mono tracking-wider uppercase flex items-center gap-1.5">
-                    <Clock size={14} className="text-violet-400" />
-                    Historical 24-Hour Profile
+                  <span className="text-xs font-bold text-slate-400 font-mono tracking-wider uppercase">
+                    Connection Diagnostics
                   </span>
-                  
-                  {isTelemetryGatheringActive ? (
-                    <div className="flex flex-col items-center justify-center h-24 bg-slate-950/40 border border-slate-800/80 p-3 rounded-lg text-center font-mono">
-                      <RefreshCw size={14} className="animate-spin text-violet-400 mb-2" />
-                      <span className="text-[10px] text-slate-400 font-bold tracking-wider">ANALYZING NETWORK PROFILE</span>
-                      <span className="text-[9px] text-slate-500 mt-1">Recording hourly latency baseline. Available in {remainingTimeStr}.</span>
+                  <div className="bg-slate-950/40 border border-slate-800/80 rounded-lg overflow-hidden font-mono text-[10px]">
+                    <div className="grid grid-cols-3 border-b border-slate-800/40 p-2 text-slate-500 font-bold">
+                      <div>PROPERTY</div>
+                      <div>VALUE</div>
+                      <div>DIAGNOSTIC</div>
                     </div>
-                  ) : (
-                    <div className="flex items-end justify-between h-24 bg-slate-950/40 border border-slate-800/80 p-3 rounded-lg gap-[2px]">
-                      {hourlyData.map((val, h) => {
-                        const isCurrent = h === currentHour;
-                        const maxVal = Math.max(...hourlyData, 1);
-                        const heightPct = (val / maxVal) * 90;
-                        
-                        return (
-                          <div
-                            key={h}
-                            className="flex-1 flex flex-col items-center group relative cursor-pointer"
-                            style={{ height: '100%' }}
-                          >
-                            <div className="absolute bottom-full mb-1 left-1/2 transform -translate-x-1/2 hidden group-hover:block z-10 bg-slate-950 border border-slate-800 text-[10px] font-mono text-slate-300 rounded px-1.5 py-0.5 whitespace-nowrap shadow-md">
-                              {h.toString().padStart(2, '0')}:00 - {val} ms
-                            </div>
-                            <div
-                              className={`w-full rounded-t-[1px] transition-all duration-300 ${
-                                isCurrent
-                                  ? 'bg-gradient-to-t from-violet-600 to-violet-400 shadow-[0_0_8px_rgba(139,92,246,0.5)]'
-                                  : 'bg-slate-700 hover:bg-slate-500'
-                              }`}
-                              style={{ height: `${heightPct}%` }}
-                            />
-                            {h % 4 === 0 && (
-                              <span className="text-[9px] text-slate-500 font-mono mt-1 select-none">
-                                {h}h
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
+                    <div className="grid grid-cols-3 border-b border-slate-800/20 p-2">
+                      <div className="text-slate-400">Test IP Address</div>
+                      <div className="text-slate-300">{server.ping_ip}</div>
+                      <div className="text-emerald-400">ICMP Active</div>
                     </div>
-                  )}
-                  
-                  {isTelemetryGatheringActive ? (
-                    <div className="flex items-start gap-2 bg-slate-950/20 border border-slate-800/60 p-3 rounded-lg mt-1 text-xs font-mono">
-                      <Clock size={13} className="text-amber-400 shrink-0 mt-0.5" />
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-slate-400">Recommended playing window:</span>
-                        <span className="text-amber-400 font-bold">COLLECTING DATA...</span>
-                        <span className="text-slate-500">Generating optimal schedule in {remainingTimeStr} (requires {TELEMETRY_DAYS} days of logs).</span>
+                    <div className="grid grid-cols-3 border-b border-slate-800/20 p-2">
+                      <div className="text-slate-400">Target Region</div>
+                      <div className="text-slate-300">{server.region}</div>
+                      <div className="text-slate-500">Static Subnets</div>
+                    </div>
+                    <div className="grid grid-cols-3 border-b border-slate-800/20 p-2">
+                      <div className="text-slate-400">Server Node</div>
+                      <div className="text-slate-300">{server.description}</div>
+                      <div className="text-slate-500">Overwatch Code</div>
+                    </div>
+                    <div className="grid grid-cols-3 p-2">
+                      <div className="text-slate-400">Process State</div>
+                      <div className="text-slate-300">{isGameRunning ? "Running" : "Idle"}</div>
+                      <div className={isGameRunning ? "text-violet-400" : "text-slate-500"}>
+                        {isGameRunning ? "Process Bound" : "Waiting for game"}
                       </div>
                     </div>
-                  ) : (
-                    <div className="flex items-start gap-2 bg-slate-950/20 border border-slate-800/60 p-3 rounded-lg mt-1 text-xs font-mono">
-                      <Clock size={13} className="text-violet-400 shrink-0 mt-0.5" />
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-slate-400">Recommended playing window:</span>
-                        <span className="text-emerald-400 font-bold">{recommendedHoursStr}</span>
-                        <span className="text-slate-500">Latency is historically lowest during these times (below daily average of {Math.round(averageHistorical)} ms).</span>
-                      </div>
-                    </div>
-                  )}
+                  </div>
                 </div>
 
               </div>
@@ -1197,18 +1165,3 @@ export default function App() {
     </div>
   );
 }
-
-const getHistoricalHourlyData = (server: ServerState) => {
-  const base = server.current_ping || (server.region === "South America" ? 40 : server.region === "USA" ? 140 : server.region === "Europe" ? 220 : 290);
-  return Array.from({ length: 24 }, (_, hour) => {
-    const timeFactor = Math.sin(((hour - 15) / 24) * 2 * Math.PI);
-    const variation = timeFactor * 0.1;
-    const str = server.description + hour;
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      hash = str.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const noise = ((Math.abs(hash) % 100) / 100 - 0.5) * 0.04;
-    return Math.round(base * (1 + variation + noise));
-  });
-};
