@@ -10,7 +10,6 @@ pub struct Server {
 }
 
 pub static SERVERS: &[Server] = &[
-    // === REGION 1: USA ===
     Server {
         name: "USA - Central",
         description: "ORD1",
@@ -40,7 +39,6 @@ pub static SERVERS: &[Server] = &[
         region: "USA",
     },
 
-    // === REGION 2: SOUTH AMERICA ===
     Server {
         name: "Chile - GCP",
         description: "SCL1",
@@ -63,7 +61,6 @@ pub static SERVERS: &[Server] = &[
         region: "South America",
     },
 
-    // === REGION 3: EUROPE ===
     Server {
         name: "Netherlands",
         description: "AMS1",
@@ -93,7 +90,6 @@ pub static SERVERS: &[Server] = &[
         region: "Europe",
     },
 
-    // === REGION 4: ASIA ===
     Server {
         name: "Tokyo",
         description: "GTK1",
@@ -149,7 +145,6 @@ struct GcpIpRanges {
     prefixes: Vec<GcpPrefix>,
 }
 
-/// Validate format of CIDR string (Sanitization)
 fn is_valid_cidr(cidr: &str) -> bool {
     let parts: Vec<&str> = cidr.split('/').collect();
     if parts.len() != 2 {
@@ -164,7 +159,6 @@ fn is_valid_cidr(cidr: &str) -> bool {
     ip_parsed && mask_parsed
 }
 
-/// Dynamically fetch Google Cloud IP ranges and update server CIDRs
 pub async fn load_dynamic_gcp_cidrs(servers: &mut [ServerState]) -> Result<(), String> {
     let url = "https://www.gstatic.com/ipranges/cloud.json";
     let response = reqwest::get(url).await.map_err(|e| e.to_string())?;
@@ -197,7 +191,7 @@ pub async fn load_dynamic_gcp_cidrs(servers: &mut [ServerState]) -> Result<(), S
     for server in servers.iter_mut() {
         let target_scopes = get_scopes_for_desc(server.description);
         if target_scopes.is_empty() {
-            continue; // Skip AWS or non-GCP servers
+            continue;
         }
 
         let mut matched_cidrs = Vec::new();

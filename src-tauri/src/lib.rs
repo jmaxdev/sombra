@@ -30,7 +30,6 @@ pub struct AppState {
     pub is_admin: bool,
 }
 
-/// Sync-readable autostart mode for use in the synchronous on_window_event handler.
 pub struct AutostartMode(pub std::sync::Mutex<String>);
 
 #[derive(serde::Serialize, Clone)]
@@ -41,7 +40,6 @@ pub struct AppStatePayload {
     pub is_admin: bool,
     pub autostart_enabled: bool,
     pub autostart_mode: String,
-    pub tcp_region: Option<String>,
 }
 
 fn check_is_admin() -> bool {
@@ -132,38 +130,9 @@ async fn get_app_state(state: State<'_, AppState>) -> Result<AppStatePayload, St
         is_admin: state.is_admin,
         autostart_enabled: app.autostart_enabled,
         autostart_mode: app.autostart_mode.clone(),
-        tcp_region: app.tcp_region.clone(),
     })
 }
 
-#[tauri::command]
-async fn save_tcp_settings(
-    tcp_region: Option<String>,
-    state: State<'_, AppState>,
-    app_handle: AppHandle,
-) -> Result<(), String> {
-    logger::info(&format!(
-        "Command 'save_tcp_settings' received to set TCP region: {:?}",
-        tcp_region
-    ));
-    if !state.is_admin {
-        logger::error("Command 'save_tcp_settings' failed: administrator privileges required.");
-        return Err("Administrator privileges required to change settings.".to_string());
-    }
-    {
-        let mut app = state.app.lock().await;
-        app.tcp_region = tcp_region;
-        app.save_settings().map_err(|e| {
-            logger::error(&format!("Error applying TCP settings: {}", e));
-            e.to_string()
-        })?;
-        let _ = app_handle.emit("servers-update", app.servers.clone());
-        let _ = app_handle.emit("status-message", app.status_message.clone());
-        logger::info(&format!("TCP settings updated. Status: {}", app.status_message));
-    }
-    spawn_immediate_ping(state.app.clone(), app_handle);
-    Ok(())
-}
 
 #[tauri::command]
 async fn save_autostart_settings(
@@ -180,7 +149,6 @@ async fn save_autostart_settings(
     app.autostart_mode = mode.clone();
     app.save_settings().map_err(|e| e.to_string())?;
 
-    // Keep the sync AutostartMode state in sync so on_window_event sees the new value.
     if let Some(mode_state) = app_handle.try_state::<AutostartMode>() {
         if let Ok(mut m) = mode_state.0.lock() {
             *m = mode;
@@ -472,8 +440,7 @@ pub fn run() {
             block_all,
             find_best_server,
             save_autostart_settings,
-            is_game_running,
-            save_tcp_settings
+            is_game_running
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -484,11 +451,9 @@ pub fn run() {
                     .unwrap_or(false);
 
                 if is_icon_mode {
-                    // Tray-only mode: hide to tray instead of closing.
                     api.prevent_close();
                     let _ = window.hide();
                 }
-                // Normal / minimized mode: allow the close → process exits.
             }
         })
         .setup(|app| {
@@ -544,10 +509,8 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
-            // Keep tray alive for the lifetime of the app
             app.manage(tray);
 
-            // Enable DevTools and right-click context menu only in dev mode
             #[cfg(debug_assertions)]
             if let Some(w) = app.get_webview_window("main") {
                 w.open_devtools();
@@ -566,11 +529,8 @@ pub fn run() {
 
                 if let Some(w) = handle_for_autostart.get_webview_window("main") {
                     if is_autostart && enabled {
-                        // Always stay hidden in tray when launched via autostart.
-                        // User can open the window from the tray icon.
                         logger::info(&format!("Launched via autostart (mode: {}). Window hidden, tray only.", mode));
                     } else {
-                        // Normal manual launch — show the window.
                         let _ = w.show();
                     }
                 }

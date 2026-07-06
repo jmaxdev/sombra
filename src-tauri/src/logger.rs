@@ -6,8 +6,6 @@ pub fn log(level: &str, message: &str) {
     let now = Local::now();
     let formatted_time = now.format("%Y-%m-%d %H:%M:%S").to_string();
     let log_line = format!("[{}] [{}] {}\n", formatted_time, level, message);
-
-    // Also print to stdout/stderr so it's visible in cargo run console
     if level == "ERROR" {
         eprint!("{}", log_line);
     } else {

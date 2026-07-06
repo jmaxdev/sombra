@@ -42,10 +42,8 @@ interface AppStatePayload {
   is_admin: boolean;
   autostart_enabled: boolean;
   autostart_mode: string;
-  tcp_region: string | null;
 }
 
-// Disable right-click context menu in production builds
 if (!import.meta.env.DEV) {
   document.addEventListener("contextmenu", (e) => e.preventDefault(), true);
 }
@@ -78,7 +76,6 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [autostartEnabled, setAutostartEnabled] = useState(false);
   const [autostartMode, setAutostartMode] = useState("normal");
-  const [tcpRegion, setTcpRegion] = useState<string | null>(null);
   const [updateStatus, setUpdateStatus] = useState("");
   const [updateProgress, setUpdateProgress] = useState(-1);
   const terminalEndRef = useRef<HTMLDivElement>(null);
@@ -144,7 +141,6 @@ export default function App() {
         if (!active) return;
         storeRef.current = store;
 
-        // Telemetry tracking initialization
         let firstRun = await store.get<number>("first_run_time");
         if (!firstRun) {
           firstRun = Date.now();
@@ -173,15 +169,12 @@ export default function App() {
         setAppState(stateData);
         setAutostartEnabled(stateData.autostart_enabled);
         setAutostartMode(stateData.autostart_mode);
-        setTcpRegion(stateData.tcp_region);
         addLog(`Loaded state. Mode: ${stateData.mode}. Admin: ${stateData.is_admin}`);
 
-        // --- Window position persistence ---
         const restoreWindowPosition = async () => {
           try {
             const saved = await store.get<{ x: number; y: number }>("window_position");
             if (saved && typeof saved.x === "number" && typeof saved.y === "number") {
-              // Verify the saved position is within an available monitor
               const monitors = await availableMonitors();
               const inBounds = monitors.some((m: Monitor) => {
                 const mx = m.position.x;
@@ -223,7 +216,6 @@ export default function App() {
           await restoreWindowPosition();
         });
         unlisteners.push(unlistenRestorePos);
-        // ------------------------------------
 
         const unlistenServers = await listen<ServerState[]>("servers-update", (event) => {
           const updatedServers = event.payload;
@@ -269,7 +261,6 @@ export default function App() {
           if (active) setVisible(false);
         }, 300);
 
-        // Check for updates every hour after the initial startup check
         if (!import.meta.env.DEV) {
           const ONE_HOUR = 60 * 60 * 1000;
           updateIntervalId = setInterval(() => {
@@ -368,20 +359,6 @@ export default function App() {
     }
   };
 
-  const handleSaveTcpRegion = async (region: string) => {
-    try {
-      const val = region === "auto" ? null : region;
-      setTcpRegion(val);
-      addLog(`Settings // Lobby Server (TCP) set to: ${region === "auto" ? "AUTO" : region}`);
-      await invoke("save_tcp_settings", { tcpRegion: val });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      addLog(`Settings Error // Failed to save TCP Region: ${msg}`);
-      console.error(err);
-    }
-  };
-
-
   const handleToggleServer = async (index: number) => {
     try {
       await invoke("toggle_server", { index });
@@ -462,10 +439,8 @@ export default function App() {
 
   const handleClose = async () => {
     if (autostartMode === "icon") {
-      // Tray-only mode: hide window, keep process alive in background.
       await getCurrentWindow().hide();
     } else {
-      // Normal / minimized mode: X button kills the process entirely.
       await exit(0);
     }
   };
@@ -922,33 +897,6 @@ export default function App() {
                 </div>
               )}
 
-              <div className="flex flex-col gap-2 bg-slate-950/40 p-3 rounded border border-slate-800/80 font-sans">
-                <div className="flex flex-col gap-0.5">
-                  <span className="font-bold text-slate-200 text-xs uppercase">Lobby Server (TCP)</span>
-                  <span className="text-[10px] text-slate-400 leading-normal">
-                    Configure which region's matchmaking/lobby servers to allow. Other TCP lobby regions will be blocked.
-                  </span>
-                </div>
-                <select
-                  value={tcpRegion || "auto"}
-                  onChange={(e) => handleSaveTcpRegion(e.target.value)}
-                  disabled={!appState?.is_admin}
-                  className="mt-1 w-full bg-slate-950/80 border border-slate-800 rounded px-2.5 py-1.5 text-xs text-slate-300 font-sans focus:outline-none focus:border-violet-500 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <option value="auto">AUTO (Recommended / No blocks)</option>
-                  {servers.map((s) => (
-                    <option key={s.description} value={s.description}>
-                      {s.name} ({s.description})
-                    </option>
-                  ))}
-                </select>
-                <div className="mt-1 flex items-start gap-1.5 text-[10px] text-amber-500/90 leading-normal">
-                  <AlertTriangle size={12} className="shrink-0 mt-0.5" />
-                  <span>
-                    Warning: Forcing a specific TCP lobby can cause longer loading screens or connection errors. Use AUTO for best performance.
-                  </span>
-                </div>
-              </div>
             </div>
 
             <div className="mt-5 border-t border-slate-800 pt-3 flex justify-end">
@@ -973,7 +921,6 @@ export default function App() {
         const currentHour = new Date().getHours();
         const expectedPing = hourlyData[currentHour];
         
-        // Real-time history
         const rtHistory = (() => {
           const recorded = latencyHistory[server.description] || [];
           if (recorded.length > 0) return recorded;
@@ -1029,8 +976,6 @@ export default function App() {
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-fadeIn">
             <div className="w-[500px] bg-slate-900 border border-slate-800 rounded-xl shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh]">
-              
-              {/* Header */}
               <div className="flex items-start justify-between border-b border-slate-800 p-4 bg-slate-950/20">
                 <div className="flex flex-col">
                   <div className="flex items-center gap-2">
@@ -1053,10 +998,7 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Scrollable Content */}
               <div className="p-4 overflow-y-auto flex-1 flex flex-col gap-4 text-xs font-sans text-slate-300">
-                
-                {/* Status & Current Ping Card */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-slate-950/40 border border-slate-800/80 p-3 rounded-lg flex flex-col justify-between">
                     <span className="text-xs font-semibold text-slate-500 font-mono tracking-wider uppercase">
@@ -1099,7 +1041,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Active Latency Alert Warning */}
                 {isHighLatency && (
                   <div className="bg-amber-500/5 border border-amber-500/30 p-3 rounded-lg flex items-start gap-2.5 animate-fadeIn">
                     <AlertTriangle className="text-amber-400 shrink-0 mt-0.5" size={14} />
@@ -1114,7 +1055,6 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Real-time Session Chart */}
                 <div className="flex flex-col gap-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold text-slate-400 font-mono tracking-wider uppercase flex items-center gap-1.5">
@@ -1171,7 +1111,6 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Historical Profile Bar Chart */}
                 <div className="flex flex-col gap-1.5">
                   <span className="text-xs font-bold text-slate-400 font-mono tracking-wider uppercase flex items-center gap-1.5">
                     <Clock size={14} className="text-violet-400" />
@@ -1219,7 +1158,6 @@ export default function App() {
                     </div>
                   )}
                   
-                  {/* Recommendations Info */}
                   {isTelemetryGatheringActive ? (
                     <div className="flex items-start gap-2 bg-slate-950/20 border border-slate-800/60 p-3 rounded-lg mt-1 text-xs font-mono">
                       <Clock size={13} className="text-amber-400 shrink-0 mt-0.5" />
@@ -1243,7 +1181,6 @@ export default function App() {
 
               </div>
 
-              {/* Footer */}
               <div className="mt-auto border-t border-slate-800 p-4 flex justify-end bg-slate-950/20">
                 <button
                   onClick={() => setSelectedServerForModal(null)}

@@ -21,10 +21,8 @@ pub fn ping_ipv4(ip: Ipv4Addr, timeout: Duration) -> Option<u32> {
             return None;
         }
 
-        // Convert Ipv4Addr to u32 in network byte order
         let destination = u32::from_ne_bytes(ip.octets());
 
-        // Standard 32-byte dummy payload to send
         let request_data = [0u8; 32];
 
         let mut reply_buf = ReplyBuffer {
