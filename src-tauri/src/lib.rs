@@ -715,26 +715,48 @@ pub fn run() {
                         let mut lobby_conn: Option<(String, std::net::Ipv4Addr)> = None;
                         let mut play_conn: Option<(String, std::net::Ipv4Addr)> = None;
 
+                        // 1. Find Lobby Server from active TCP connections (prioritize LOBBY_HUBS)
                         for name in &current_connected {
                             if let Some((desc, ip)) = ip_mappings.get(name) {
-                                let is_lobby_hub = LOBBY_HUBS.contains(&desc.as_str());
-                                if is_lobby_hub {
-                                    if lobby_conn.is_none() {
-                                        lobby_conn = Some((name.clone(), *ip));
-                                    } else if play_conn.is_none() {
-                                        play_conn = Some((name.clone(), *ip));
-                                    }
-                                } else {
-                                    if play_conn.is_none() {
-                                        play_conn = Some((name.clone(), *ip));
-                                    } else if lobby_conn.is_none() {
-                                        lobby_conn = Some((name.clone(), *ip));
-                                    }
+                                if LOBBY_HUBS.contains(&desc.as_str()) {
+                                    lobby_conn = Some((name.clone(), *ip));
+                                    break;
+                                }
+                            }
+                        }
+                        if lobby_conn.is_none() {
+                            for name in &current_connected {
+                                if let Some((_, ip)) = ip_mappings.get(name) {
+                                    lobby_conn = Some((name.clone(), *ip));
+                                    break;
                                 }
                             }
                         }
 
-                        // Fallbacks if only one is detected
+                        // 2. Find Play Server
+                        // Case A: Is there a connected server that is unblocked?
+                        for name in &current_connected {
+                            if let Some((_, ip)) = ip_mappings.get(name) {
+                                let is_unblocked = servers.iter().any(|s| s.name == *name && !s.is_blocked);
+                                if is_unblocked {
+                                    play_conn = Some((name.clone(), *ip));
+                                    break;
+                                }
+                            }
+                        }
+
+                        // Case B: Fall back to the unblocked server in Sombra's config
+                        if play_conn.is_none() {
+                            let unblocked_servers: Vec<ServerState> = servers.iter().filter(|s| !s.is_blocked).cloned().collect();
+                            if !unblocked_servers.is_empty() {
+                                let best_server = &unblocked_servers[0];
+                                if let Ok(ip) = best_server.ping_ip.parse::<std::net::Ipv4Addr>() {
+                                    play_conn = Some((best_server.name.to_string(), ip));
+                                }
+                            }
+                        }
+
+                        // Fallbacks
                         if lobby_conn.is_none() && play_conn.is_some() {
                             lobby_conn = play_conn.clone();
                         } else if play_conn.is_none() && lobby_conn.is_some() {

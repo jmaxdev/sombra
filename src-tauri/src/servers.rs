@@ -14,7 +14,7 @@ pub static SERVERS: &[Server] = &[
         name: "USA - Central",
         description: "ORD1",
         ping_ip: "8.34.210.23",
-        cidrs: "64.224.0.0/21,24.105.40.0/21",
+        cidrs: "24.105.0.0/16",
         region: "USA",
     },
     Server {
@@ -28,7 +28,7 @@ pub static SERVERS: &[Server] = &[
         name: "USA - West",
         description: "LAS1",
         ping_ip: "34.125.0.1",
-        cidrs: "64.224.24.0/23",
+        cidrs: "64.224.0.0/16",
         region: "USA",
     },
     Server {
