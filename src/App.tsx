@@ -9,8 +9,8 @@ import { check } from "@tauri-apps/plugin-updater";
 import { relaunch, exit } from "@tauri-apps/plugin-process";
 import { getVersion } from '@tauri-apps/api/app';
 import {
-  Activity, ShieldCheck, Lock, Trash2, Cpu, RefreshCw, Route, Terminal, Server, Copy, Minus, X, Settings,
-  TrendingUp
+  Activity, Lock, Trash2, Cpu, RefreshCw, Route, Terminal, Server, Copy, Minus, X, Settings,
+  TrendingUp, AlertTriangle, Clock
 } from "lucide-react";
 
 import "./App.css";
@@ -86,6 +86,8 @@ export default function App() {
   const [selectedServerForModal, setSelectedServerForModal] = useState<ServerState | null>(null);
   const [latencyHistory, setLatencyHistory] = useState<Record<string, number[]>>({});
   const [isGameRunning, setIsGameRunning] = useState(false);
+  const [showGameRunningWarning, setShowGameRunningWarning] = useState(false);
+  const [telemetryData, setTelemetryData] = useState<Record<string, Record<number, number[]>>>({});
 
   useEffect(() => {
     let active = true;
@@ -157,6 +159,8 @@ export default function App() {
           }
         }
 
+        const savedTelemetry = await store.get<Record<string, Record<number, number[]>>>("telemetry") || {};
+        setTelemetryData(savedTelemetry);
 
         addLog("Sombra console initialized. Ready.");
 
@@ -234,6 +238,27 @@ export default function App() {
               }
             });
             return nextHistory;
+          });
+          setTelemetryData((prev) => {
+            const nextTelemetry = { ...prev };
+            let modified = false;
+            const currentHour = new Date().getHours();
+            updatedServers.forEach((s) => {
+              if (s.current_ping !== null) {
+                if (!nextTelemetry[s.description]) {
+                  nextTelemetry[s.description] = {};
+                }
+                const hourlyPings = nextTelemetry[s.description][currentHour] || [];
+                nextTelemetry[s.description][currentHour] = [...hourlyPings, s.current_ping].slice(-30);
+                modified = true;
+              }
+            });
+            if (modified && storeRef.current) {
+              storeRef.current.set("telemetry", nextTelemetry).then(() => {
+                storeRef.current.save();
+              });
+            }
+            return nextTelemetry;
           });
         });
         if (!active) {
@@ -360,6 +385,10 @@ export default function App() {
   };
 
   const handleToggleServer = async (index: number) => {
+    if (isGameRunning) {
+      setShowGameRunningWarning(true);
+      return;
+    }
     try {
       await invoke("toggle_server", { index });
     } catch (err: any) {
@@ -368,6 +397,10 @@ export default function App() {
   };
 
   const handleSetMode = async (mode: OperationMode) => {
+    if (isGameRunning) {
+      setShowGameRunningWarning(true);
+      return;
+    }
     try {
       await invoke("set_mode", { mode });
       setAppState((prev) => {
@@ -380,6 +413,10 @@ export default function App() {
   };
 
   const handleUnblockAll = async () => {
+    if (isGameRunning) {
+      setShowGameRunningWarning(true);
+      return;
+    }
     try {
       await invoke("unblock_all");
       setAppState((prev) => {
@@ -392,6 +429,10 @@ export default function App() {
   };
 
   const handleBlockAll = async () => {
+    if (isGameRunning) {
+      setShowGameRunningWarning(true);
+      return;
+    }
     try {
       await invoke("block_all");
       setAppState((prev) => {
@@ -406,6 +447,10 @@ export default function App() {
 
 
   const handleFindBestServer = async () => {
+    if (isGameRunning) {
+      setShowGameRunningWarning(true);
+      return;
+    }
     if (optimizing) return;
     setOptimizing(true);
     addLog("Starting best server sweep...");
@@ -528,23 +573,6 @@ export default function App() {
 
           <div className="flex items-center gap-2">
 
-            <div className={`flex items-center gap-1.5 px-3 py-1 rounded border font-mono text-xs font-semibold transition-all duration-300 ${appState?.is_admin
-              ? "text-emerald-400 border-emerald-500/20 bg-emerald-500/5 shadow-[0_0_10px_rgba(16,185,129,0.03)]"
-              : "text-rose-400 border-rose-500/20 bg-rose-500/5"
-              }`}>
-              {appState?.is_admin ? (
-                <>
-                  <ShieldCheck size={13} className="text-emerald-400" />
-                  <span>PRIVILEGED</span>
-                </>
-              ) : (
-                <>
-                  <Lock size={13} className="text-rose-400" />
-                  <span>NO ADMIN</span>
-                </>
-              )}
-            </div>
-
 
             <div className="flex items-center gap-1.5 px-3 py-1 rounded border border-violet-500/20 bg-violet-500/5 text-violet-400 font-mono text-xs font-semibold shadow-[0_0_10px_rgba(139,92,246,0.03)]">
               <Route size={13} className="text-violet-400" />
@@ -645,7 +673,7 @@ export default function App() {
                                 }
                               }}
                             >
-                              {server.is_blocked ? "BLOCKED" : "UNRESTRICTED"}
+                              {server.is_blocked ? "BLOCKED" : "ALLOWED"}
                             </span>
                           </div>
                         </td>
@@ -912,6 +940,30 @@ export default function App() {
         </div>
       )}
 
+      {showGameRunningWarning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-fadeIn">
+          <div className="w-[420px] bg-slate-900 border border-slate-800 rounded-xl shadow-2xl relative overflow-hidden flex flex-col p-5">
+            <div className="flex items-center gap-3 text-amber-500 mb-3">
+              <AlertTriangle size={20} className="shrink-0" />
+              <h3 className="text-sm font-bold text-slate-100">
+                Action Blocked
+              </h3>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed font-sans">
+              It is not possible to perform these actions while the game is running. Please close Overwatch 2 before modifying network configurations or blocking/unblocking servers.
+            </p>
+            <div className="mt-5 flex justify-end">
+              <button
+                onClick={() => setShowGameRunningWarning(false)}
+                className="px-4 py-2 font-mono text-xs font-bold tracking-wider rounded border border-violet-500/20 bg-violet-500/5 text-violet-400 hover:bg-violet-500/10 hover:border-violet-500/40 transition-all cursor-pointer"
+              >
+                UNDERSTOOD
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {selectedServerForModal && (() => {
         const server = selectedServerForModal;
         const isAutoMode = appState?.mode !== "Manual";
@@ -930,6 +982,51 @@ export default function App() {
         const rtRange = Math.max(rtMax - rtMin, 15);
         const graphMin = Math.max(0, rtMin - rtRange * 0.1);
         const graphMax = rtMax + rtRange * 0.1;
+
+        const hourlyAverages = Array.from({ length: 24 }, (_, hour) => {
+          const pings = telemetryData[server.description]?.[hour] || [];
+          if (pings.length === 0) return null;
+          return Math.round(pings.reduce((a, b) => a + b, 0) / pings.length);
+        });
+
+        const currentHour = new Date().getHours();
+        const recordedHoursCount = hourlyAverages.filter(val => val !== null).length;
+        const hasEnoughTelemetry = recordedHoursCount >= 3;
+
+        let recommendedHoursStr = "Collecting telemetry...";
+        let averageHistorical = 0;
+        if (hasEnoughTelemetry) {
+          const validAverages = hourlyAverages.filter((v): v is number => v !== null);
+          averageHistorical = validAverages.reduce((a, b) => a + b, 0) / validAverages.length;
+          
+          const goodHours: number[] = [];
+          hourlyAverages.forEach((v, h) => {
+            if (v !== null && v < averageHistorical) {
+              goodHours.push(h);
+            }
+          });
+
+          const formatRecommendedHours = (hours: number[]) => {
+            if (hours.length === 0) return "N/A";
+            const ranges: string[] = [];
+            let start = hours[0];
+            let prev = hours[0];
+            for (let i = 1; i <= hours.length; i++) {
+              const curr = hours[i];
+              if (curr !== prev + 1 || i === hours.length) {
+                if (start === prev) {
+                  ranges.push(`${start.toString().padStart(2, '0')}:00`);
+                } else {
+                  ranges.push(`${start.toString().padStart(2, '0')}:00 - ${prev.toString().padStart(2, '0')}:00`);
+                }
+                start = curr;
+              }
+              prev = curr;
+            }
+            return ranges.join(", ");
+          };
+          recommendedHoursStr = formatRecommendedHours(goodHours);
+        }
 
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 animate-fadeIn">
@@ -1038,7 +1135,7 @@ export default function App() {
                         ? "text-rose-400 border-rose-500/20 bg-rose-500/5"
                         : "text-emerald-400 border-emerald-500/20 bg-emerald-500/5"
                     }`}>
-                      {server.is_blocked ? "BLOCKED" : "UNRESTRICTED"}
+                      {server.is_blocked ? "BLOCKED" : "ALLOWED"}
                     </span>
                   </div>
                   
@@ -1051,7 +1148,7 @@ export default function App() {
                           : "border-rose-500/20 bg-rose-500/5 text-rose-400 hover:bg-rose-500/10 hover:border-rose-500/40"
                       }`}
                     >
-                      {server.is_blocked ? "ALLOW REGION" : "BLOCK REGION"}
+                      {server.is_blocked ? "ALLOW" : "BLOCK"}
                     </button>
                   )}
                 </div>
@@ -1110,6 +1207,90 @@ export default function App() {
                       );
                     })()}
                   </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-400 font-mono tracking-wider uppercase flex items-center gap-1.5">
+                      <Clock size={14} className="text-violet-400" />
+                      Historical 24-Hour Profile
+                    </span>
+                    <span className="text-[10px] text-slate-500 font-mono">
+                      {recordedHoursCount}/24 hours recorded
+                    </span>
+                  </div>
+                  
+                  {recordedHoursCount === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-24 bg-slate-950/40 border border-slate-800/80 p-3 rounded-lg text-center font-mono">
+                      <RefreshCw size={14} className="animate-spin text-violet-400 mb-2" />
+                      <span className="text-[10px] text-slate-400 font-bold tracking-wider">ANALYZING NETWORK PROFILE</span>
+                      <span className="text-[9px] text-slate-500 mt-1">Recording hourly latency baseline. Keep Sombra open to collect data.</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-end justify-between h-24 bg-slate-950/40 border border-slate-800/80 p-3 rounded-lg gap-[2px]">
+                      {hourlyAverages.map((val, h) => {
+                        const isCurrent = h === currentHour;
+                        const validAverages = hourlyAverages.filter((v): v is number => v !== null);
+                        const maxVal = validAverages.length > 0 ? Math.max(...validAverages, 1) : 100;
+                        const heightPct = val !== null ? (val / maxVal) * 90 : 0;
+                        
+                        return (
+                          <div
+                            key={h}
+                            className="flex-1 flex flex-col items-center group relative cursor-pointer"
+                            style={{ height: '100%' }}
+                          >
+                            {val !== null ? (
+                              <>
+                                <div className="absolute bottom-full mb-1 left-1/2 transform -translate-x-1/2 hidden group-hover:block z-10 bg-slate-950 border border-slate-800 text-[10px] font-mono text-slate-300 rounded px-1.5 py-0.5 whitespace-nowrap shadow-md">
+                                  {h.toString().padStart(2, '0')}:00 - {val} ms
+                                </div>
+                                <div
+                                  className={`w-full rounded-t-[1px] transition-all duration-300 ${
+                                    isCurrent
+                                      ? 'bg-gradient-to-t from-violet-600 to-violet-400 shadow-[0_0_8px_rgba(139,92,246,0.5)]'
+                                      : 'bg-slate-700 hover:bg-slate-500'
+                                  }`}
+                                  style={{ height: `${heightPct}%` }}
+                                />
+                              </>
+                            ) : (
+                              <div
+                                className="w-full border-t border-dashed border-slate-800/20 bg-slate-950/10"
+                                style={{ height: '90%' }}
+                                title={`No data for ${h.toString().padStart(2, '0')}:00`}
+                              />
+                            )}
+                            {h % 4 === 0 && (
+                              <span className="text-[9px] text-slate-500 font-mono mt-1 select-none">
+                                {h}h
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  
+                  {!hasEnoughTelemetry ? (
+                    <div className="flex items-start gap-2 bg-slate-950/20 border border-slate-800/60 p-3 rounded-lg mt-1 text-xs font-mono">
+                      <Clock size={13} className="text-amber-400 shrink-0 mt-0.5" />
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-slate-400">Recommended playing window:</span>
+                        <span className="text-amber-400 font-bold">COLLECTING DATA...</span>
+                        <span className="text-slate-500">Gathering more hourly latency readings to generate optimal recommendations.</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-2 bg-slate-950/20 border border-slate-800/60 p-3 rounded-lg mt-1 text-xs font-mono">
+                      <Clock size={13} className="text-violet-400 shrink-0 mt-0.5" />
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-slate-400">Recommended playing window:</span>
+                        <span className="text-emerald-400 font-bold">{recommendedHoursStr}</span>
+                        <span className="text-slate-500">Latency is historically lowest during these times (below daily average of {Math.round(averageHistorical)} ms).</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex flex-col gap-1.5">
