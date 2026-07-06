@@ -232,3 +232,112 @@ pub async fn load_dynamic_gcp_cidrs(servers: &mut [ServerState]) -> Result<(), S
     ));
     Ok(())
 }
+
+#[derive(Debug, Deserialize)]
+struct AwsPrefix {
+    #[serde(rename = "ip_prefix")]
+    ip_prefix: Option<String>,
+    region: String,
+    service: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct AwsIpv6Prefix {
+    #[serde(rename = "ipv6_prefix")]
+    ipv6_prefix: Option<String>,
+    region: String,
+    service: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct AwsIpRanges {
+    prefixes: Vec<AwsPrefix>,
+    #[serde(rename = "ipv6_prefixes")]
+    ipv6_prefixes: Vec<AwsIpv6Prefix>,
+}
+
+fn get_aws_regions_for_desc(desc: &str) -> Vec<&str> {
+    match desc {
+        "ORD1" => vec!["us-east-2"], // Ohio
+        "GUE4" => vec!["us-east-1"], // N. Virginia
+        "PDX1" => vec!["us-west-1", "us-west-2"], // N. California, Oregon
+        "GRU1" => vec!["sa-east-1"], // São Paulo
+        "AMS1" => vec!["eu-west-1", "eu-west-2"], // Ireland, London
+        "CDG1" => vec!["eu-west-3"], // Paris
+        "FRA1" => vec!["eu-central-1"], // Frankfurt
+        "GEN1" => vec!["eu-north-1"], // Stockholm
+        "GTK1" => vec!["ap-northeast-1"], // Tokyo
+        "ICN1" => vec!["ap-northeast-2"], // Seoul
+        "GSG1" => vec!["ap-southeast-1"], // Singapore
+        _ => vec![],
+    }
+}
+
+pub async fn load_dynamic_aws_cidrs(servers: &mut [ServerState]) -> Result<(), String> {
+    let url = "https://ip-ranges.amazonaws.com/ip-ranges.json";
+    let response = reqwest::get(url).await.map_err(|e| e.to_string())?;
+    let ip_ranges = response
+        .json::<AwsIpRanges>()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let mut updated_count = 0;
+    for server in servers.iter_mut() {
+        let target_regions = get_aws_regions_for_desc(server.description);
+        if target_regions.is_empty() {
+            continue;
+        }
+
+        let mut matched_cidrs = Vec::new();
+        if !server.cidrs.is_empty() {
+            for c in server.cidrs.split(',') {
+                let trimmed = c.trim().to_string();
+                if !trimmed.is_empty() {
+                    matched_cidrs.push(trimmed);
+                }
+            }
+        }
+
+        for prefix in &ip_ranges.prefixes {
+            if target_regions.contains(&prefix.region.as_str()) && prefix.service == "EC2" {
+                if let Some(ref ipv4) = prefix.ip_prefix {
+                    if is_valid_cidr(ipv4) {
+                        matched_cidrs.push(ipv4.clone());
+                    } else {
+                        crate::logger::error(&format!(
+                            "Security Warning: Malformed/Invalid AWS IPv4 CIDR filtered out: {}",
+                            ipv4
+                        ));
+                    }
+                }
+            }
+        }
+        for prefix in &ip_ranges.ipv6_prefixes {
+            if target_regions.contains(&prefix.region.as_str()) && prefix.service == "EC2" {
+                if let Some(ref ipv6) = prefix.ipv6_prefix {
+                    if is_valid_cidr(ipv6) {
+                        matched_cidrs.push(ipv6.clone());
+                    } else {
+                        crate::logger::error(&format!(
+                            "Security Warning: Malformed/Invalid AWS IPv6 CIDR filtered out: {}",
+                            ipv6
+                        ));
+                    }
+                }
+            }
+        }
+
+        if !matched_cidrs.is_empty() {
+            matched_cidrs.sort();
+            matched_cidrs.dedup();
+            server.cidrs = matched_cidrs.join(",");
+            updated_count += 1;
+        }
+    }
+
+    crate::logger::info(&format!(
+        "Successfully loaded dynamic AWS IP ranges for {} servers.",
+        updated_count
+    ));
+    Ok(())
+}

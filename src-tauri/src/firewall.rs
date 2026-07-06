@@ -141,15 +141,12 @@ pub fn apply_rules(
             let rules = policy.Rules()?;
 
             let new_rule: INetFwRule = CoCreateInstance(&NetFwRule, None, CLSCTX_INPROC_SERVER)?;
-
-            new_rule.SetName(&BSTR::from(RULE_NAME))?;
+            new_rule.SetName(&BSTR::from(RULE_NAME))?; // "sombra/rules"
             new_rule.SetGrouping(&BSTR::from(RULE_GROUP))?;
             new_rule.SetDescription(&BSTR::from(description))?;
-
-            new_rule.SetProtocol(17)?;
+            new_rule.SetProtocol(17)?; // UDP
             new_rule.SetDirection(NET_FW_RULE_DIR_OUT)?;
             new_rule.SetAction(NET_FW_ACTION_BLOCK)?;
-
             new_rule.SetProfiles(0x7FFFFFFF)?;
 
             if let Some(app_path) = tunneling_path {
@@ -164,7 +161,6 @@ pub fn apply_rules(
                 new_rule.SetRemoteAddresses(&BSTR::from(blocked_ips))?;
                 new_rule.SetEnabled(VARIANT_BOOL::from(true))?;
             }
-
             rules.Add(&new_rule)?;
         }
         Ok(())

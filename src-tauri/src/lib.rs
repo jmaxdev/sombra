@@ -537,16 +537,27 @@ pub fn run() {
             });
 
             
-            let state_for_gcp = state_clone.clone();
-            let handle_for_gcp = handle_clone.clone();
+            let state_for_ips = state_clone.clone();
+            let handle_for_ips = handle_clone.clone();
             tauri::async_runtime::spawn(async move {
-                logger::info("Starting dynamic Google Cloud IP ranges loader...");
+                logger::info("Starting dynamic IP ranges loader (GCP + AWS)...");
                 let mut servers = {
-                    let app_lock = state_for_gcp.lock().await;
+                    let app_lock = state_for_ips.lock().await;
                     app_lock.servers.clone()
                 };
-                if let Ok(_) = servers::load_dynamic_gcp_cidrs(&mut servers).await {
-                    let mut app_lock = state_for_gcp.lock().await;
+
+                let gcp_res = servers::load_dynamic_gcp_cidrs(&mut servers).await;
+                if let Err(e) = &gcp_res {
+                    logger::error(&format!("Failed to load dynamic GCP ranges: {}", e));
+                }
+
+                let aws_res = servers::load_dynamic_aws_cidrs(&mut servers).await;
+                if let Err(e) = &aws_res {
+                    logger::error(&format!("Failed to load dynamic AWS ranges: {}", e));
+                }
+
+                if gcp_res.is_ok() || aws_res.is_ok() {
+                    let mut app_lock = state_for_ips.lock().await;
                     for (i, server) in servers.iter().enumerate() {
                         if i < app_lock.servers.len() {
                             app_lock.servers[i].cidrs = server.cidrs.clone();
@@ -554,14 +565,14 @@ pub fn run() {
                     }
                     if let Err(e) = app_lock.save_settings() {
                         logger::error(&format!(
-                            "Failed to save settings after dynamic GCP ranges load: {:?}",
+                            "Failed to save settings after dynamic IP ranges load: {:?}",
                             e
                         ));
                     } else {
-                        logger::info("Dynamic GCP IP ranges applied and saved successfully.");
+                        logger::info("Dynamic IP ranges (GCP + AWS) applied and saved successfully.");
                         
                         let updated_servers = app_lock.servers.clone();
-                        let _ = handle_for_gcp.emit("servers-update", updated_servers);
+                        let _ = handle_for_ips.emit("servers-update", updated_servers);
                     }
                 }
             });
@@ -649,6 +660,25 @@ pub fn run() {
                                 "status-message",
                                 format!("GAME TRACKER // Overwatch 2 process detected (PID: {})", pid),
                             );
+
+                            if let Some(path) = app::detect_overwatch_path() {
+                                let mut app = state_for_tracker.lock().await;
+                                if app.tunneling_path.as_deref() != Some(&path) {
+                                    logger::info(&format!(
+                                        "GAME TRACKER // Path mismatch. Auto-binding to actual path: {}",
+                                        path
+                                    ));
+                                    app.tunneling_path = Some(path.clone());
+                                    if let Err(e) = app.save_settings() {
+                                        logger::error(&format!("GAME TRACKER // Failed to update firewall: {:?}", e));
+                                    } else {
+                                        let _ = handle_for_tracker.emit(
+                                            "status-message",
+                                            format!("GAME TRACKER // Firewall auto-bound to path: {}", path)
+                                        );
+                                    }
+                                }
+                            }
                         }
                     } else if overwatch_pid.is_none() && was_running {
                         was_running = false;
