@@ -141,10 +141,10 @@ pub fn apply_rules(
             let rules = policy.Rules()?;
 
             let new_rule: INetFwRule = CoCreateInstance(&NetFwRule, None, CLSCTX_INPROC_SERVER)?;
-            new_rule.SetName(&BSTR::from(RULE_NAME))?; // "sombra/rules"
+            new_rule.SetName(&BSTR::from(RULE_NAME))?; 
             new_rule.SetGrouping(&BSTR::from(RULE_GROUP))?;
             new_rule.SetDescription(&BSTR::from(description))?;
-            new_rule.SetProtocol(17)?; // UDP
+            new_rule.SetProtocol(17)?; 
             new_rule.SetDirection(NET_FW_RULE_DIR_OUT)?;
             new_rule.SetAction(NET_FW_ACTION_BLOCK)?;
             new_rule.SetProfiles(0x7FFFFFFF)?;

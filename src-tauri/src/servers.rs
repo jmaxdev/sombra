@@ -118,6 +118,20 @@ pub static SERVERS: &[Server] = &[
         cidrs: "34.1.128.0/20,34.1.192.0/20,34.2.16.0/20,34.2.128.0/17,34.21.128.0/17,34.87.0.0/17,34.87.128.0/18,34.104.58.0/23,34.104.106.0/23,34.124.42.0/23,34.124.128.0/17,34.126.64.0/18,34.126.128.0/18,34.128.44.0/23,34.128.60.0/23,34.142.128.0/17,34.143.128.0/17,34.152.104.0/23,34.153.40.0/23,34.153.232.0/23,34.157.82.0/23,34.157.88.0/23,34.157.210.0/23,34.158.32.0/19,34.177.72.0/23,34.177.80.0/20,34.177.96.0/20,34.183.80.0/24,34.184.75.0/24,35.185.176.0/20,35.186.144.0/20,35.187.224.0/19,35.197.128.0/19,35.198.192.0/18,35.213.128.0/18,35.220.24.0/23,35.234.192.0/20,35.240.128.0/17,35.242.24.0/23,35.247.128.0/18,136.110.0.0/18,2600:1900:4080::/44",
         region: "Asia",
     },
+    Server {
+        name: "Australia",
+        description: "SYD2",
+        ping_ip: "34.40.128.34",
+        cidrs: "158.115.196.0/23",
+        region: "Australia",
+    },
+    Server {
+        name: "Saudi Arabia",
+        description: "GMEC2",
+        ping_ip: "34.166.0.84",
+        cidrs: "8.228.192.0/19,8.230.64.0/19,34.1.48.0/20,34.152.84.0/23,34.152.102.0/24,34.157.122.128/25,34.157.218.128/25,34.166.0.0/16,34.177.48.0/23,34.177.70.0/24,34.183.69.0/24,34.184.68.0/24,35.252.32.0/19,2600:1900:5400::/44",
+        region: "Middle East",
+    },
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -131,213 +145,4 @@ pub struct ServerState {
     pub current_ping: Option<u32>,
 }
 
-#[derive(Debug, Deserialize)]
-struct GcpPrefix {
-    #[serde(rename = "ipv4Prefix")]
-    ipv4_prefix: Option<String>,
-    #[serde(rename = "ipv6Prefix")]
-    ipv6_prefix: Option<String>,
-    scope: String,
-}
 
-#[derive(Debug, Deserialize)]
-struct GcpIpRanges {
-    prefixes: Vec<GcpPrefix>,
-}
-
-fn is_valid_cidr(cidr: &str) -> bool {
-    let parts: Vec<&str> = cidr.split('/').collect();
-    if parts.len() != 2 {
-        return false;
-    }
-    let ip_part = parts[0];
-    let mask_part = parts[1];
-
-    let ip_parsed = ip_part.parse::<std::net::IpAddr>().is_ok();
-    let mask_parsed = mask_part.parse::<u8>().map(|m| m <= 128).unwrap_or(false);
-
-    ip_parsed && mask_parsed
-}
-
-pub async fn load_dynamic_gcp_cidrs(servers: &mut [ServerState]) -> Result<(), String> {
-    let url = "https://www.gstatic.com/ipranges/cloud.json";
-    let response = reqwest::get(url).await.map_err(|e| e.to_string())?;
-    let ip_ranges = response
-        .json::<GcpIpRanges>()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    fn get_scopes_for_desc(desc: &str) -> Vec<&str> {
-        match desc {
-            "ORD1" => vec!["us-central1"],
-            "GUE4" => vec!["us-east4", "us-east1"],
-            "LAS1" => vec!["us-west4"],
-            "PDX1" => vec!["us-west1", "us-west2"],
-            "SCL1" => vec!["southamerica-west1"],
-            "GBR1" => vec!["southamerica-east1"],
-            "AMS1" => vec!["europe-west4"],
-            "CDG1" => vec!["europe-west9"],
-            "FRA1" => vec!["europe-west3"],
-            "GEN1" => vec!["europe-north1"],
-            "GTK1" => vec!["asia-northeast1"],
-            "ICN1" => vec!["asia-northeast3"],
-            "TPE1" => vec!["asia-east1"],
-            "GSG1" => vec!["asia-southeast1"],
-            _ => vec![],
-        }
-    }
-
-    let mut updated_count = 0;
-    for server in servers.iter_mut() {
-        let target_scopes = get_scopes_for_desc(server.description);
-        if target_scopes.is_empty() {
-            continue;
-        }
-
-        let mut matched_cidrs = Vec::new();
-        for prefix in &ip_ranges.prefixes {
-            if target_scopes.contains(&prefix.scope.as_str()) {
-                if let Some(ref ipv4) = prefix.ipv4_prefix {
-                    if is_valid_cidr(ipv4) {
-                        matched_cidrs.push(ipv4.clone());
-                    } else {
-                        crate::logger::error(&format!(
-                            "Security Warning: Malformed/Invalid IPv4 CIDR filtered out: {}",
-                            ipv4
-                        ));
-                    }
-                }
-                if let Some(ref ipv6) = prefix.ipv6_prefix {
-                    if is_valid_cidr(ipv6) {
-                        matched_cidrs.push(ipv6.clone());
-                    } else {
-                        crate::logger::error(&format!(
-                            "Security Warning: Malformed/Invalid IPv6 CIDR filtered out: {}",
-                            ipv6
-                        ));
-                    }
-                }
-            }
-        }
-
-        if !matched_cidrs.is_empty() {
-            server.cidrs = matched_cidrs.join(",");
-            updated_count += 1;
-        }
-    }
-
-    crate::logger::info(&format!(
-        "Successfully loaded dynamic GCP IP ranges for {} servers.",
-        updated_count
-    ));
-    Ok(())
-}
-
-#[derive(Debug, Deserialize)]
-struct AwsPrefix {
-    #[serde(rename = "ip_prefix")]
-    ip_prefix: Option<String>,
-    region: String,
-    service: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct AwsIpv6Prefix {
-    #[serde(rename = "ipv6_prefix")]
-    ipv6_prefix: Option<String>,
-    region: String,
-    service: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct AwsIpRanges {
-    prefixes: Vec<AwsPrefix>,
-    #[serde(rename = "ipv6_prefixes")]
-    ipv6_prefixes: Vec<AwsIpv6Prefix>,
-}
-
-fn get_aws_regions_for_desc(desc: &str) -> Vec<&str> {
-    match desc {
-        "ORD1" => vec!["us-east-2"], // Ohio
-        "GUE4" => vec!["us-east-1"], // N. Virginia
-        "PDX1" => vec!["us-west-1", "us-west-2"], // N. California, Oregon
-        "GRU1" => vec!["sa-east-1"], // São Paulo
-        "AMS1" => vec!["eu-west-1", "eu-west-2"], // Ireland, London
-        "CDG1" => vec!["eu-west-3"], // Paris
-        "FRA1" => vec!["eu-central-1"], // Frankfurt
-        "GEN1" => vec!["eu-north-1"], // Stockholm
-        "GTK1" => vec!["ap-northeast-1"], // Tokyo
-        "ICN1" => vec!["ap-northeast-2"], // Seoul
-        "GSG1" => vec!["ap-southeast-1"], // Singapore
-        _ => vec![],
-    }
-}
-
-pub async fn load_dynamic_aws_cidrs(servers: &mut [ServerState]) -> Result<(), String> {
-    let url = "https://ip-ranges.amazonaws.com/ip-ranges.json";
-    let response = reqwest::get(url).await.map_err(|e| e.to_string())?;
-    let ip_ranges = response
-        .json::<AwsIpRanges>()
-        .await
-        .map_err(|e| e.to_string())?;
-
-    let mut updated_count = 0;
-    for server in servers.iter_mut() {
-        let target_regions = get_aws_regions_for_desc(server.description);
-        if target_regions.is_empty() {
-            continue;
-        }
-
-        let mut matched_cidrs = Vec::new();
-        if !server.cidrs.is_empty() {
-            for c in server.cidrs.split(',') {
-                let trimmed = c.trim().to_string();
-                if !trimmed.is_empty() {
-                    matched_cidrs.push(trimmed);
-                }
-            }
-        }
-
-        for prefix in &ip_ranges.prefixes {
-            if target_regions.contains(&prefix.region.as_str()) && prefix.service == "EC2" {
-                if let Some(ref ipv4) = prefix.ip_prefix {
-                    if is_valid_cidr(ipv4) {
-                        matched_cidrs.push(ipv4.clone());
-                    } else {
-                        crate::logger::error(&format!(
-                            "Security Warning: Malformed/Invalid AWS IPv4 CIDR filtered out: {}",
-                            ipv4
-                        ));
-                    }
-                }
-            }
-        }
-        for prefix in &ip_ranges.ipv6_prefixes {
-            if target_regions.contains(&prefix.region.as_str()) && prefix.service == "EC2" {
-                if let Some(ref ipv6) = prefix.ipv6_prefix {
-                    if is_valid_cidr(ipv6) {
-                        matched_cidrs.push(ipv6.clone());
-                    } else {
-                        crate::logger::error(&format!(
-                            "Security Warning: Malformed/Invalid AWS IPv6 CIDR filtered out: {}",
-                            ipv6
-                        ));
-                    }
-                }
-            }
-        }
-
-        if !matched_cidrs.is_empty() {
-            matched_cidrs.sort();
-            matched_cidrs.dedup();
-            server.cidrs = matched_cidrs.join(",");
-            updated_count += 1;
-        }
-    }
-
-    crate::logger::info(&format!(
-        "Successfully loaded dynamic AWS IP ranges for {} servers.",
-        updated_count
-    ));
-    Ok(())
-}

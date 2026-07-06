@@ -7,7 +7,7 @@ use windows::Win32::NetworkManagement::IpHelper::{
 #[repr(C, align(8))]
 struct ReplyBuffer {
     reply: ICMP_ECHO_REPLY,
-    padding: [u8; 64], // Sufficient padding for 32-byte request payload + 8-byte ICMP header/error buffer
+    padding: [u8; 64], 
 }
 
 pub fn ping_ipv4(ip: Ipv4Addr, timeout: Duration) -> Option<u32> {

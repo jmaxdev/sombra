@@ -390,6 +390,9 @@ pub fn run() {
     if is_admin {
         let _ = app.load_settings();
         logger::info("Settings loaded from firewall rule descriptions.");
+        if let Err(e) = app.save_settings() {
+            logger::error(&format!("Failed to apply settings on startup: {:?}", e));
+        }
     } else {
         app.status_message =
             "WARNING: Not running as Administrator. Firewall changes will fail!".to_string();
@@ -537,45 +540,7 @@ pub fn run() {
             });
 
             
-            let state_for_ips = state_clone.clone();
-            let handle_for_ips = handle_clone.clone();
-            tauri::async_runtime::spawn(async move {
-                logger::info("Starting dynamic IP ranges loader (GCP + AWS)...");
-                let mut servers = {
-                    let app_lock = state_for_ips.lock().await;
-                    app_lock.servers.clone()
-                };
 
-                let gcp_res = servers::load_dynamic_gcp_cidrs(&mut servers).await;
-                if let Err(e) = &gcp_res {
-                    logger::error(&format!("Failed to load dynamic GCP ranges: {}", e));
-                }
-
-                let aws_res = servers::load_dynamic_aws_cidrs(&mut servers).await;
-                if let Err(e) = &aws_res {
-                    logger::error(&format!("Failed to load dynamic AWS ranges: {}", e));
-                }
-
-                if gcp_res.is_ok() || aws_res.is_ok() {
-                    let mut app_lock = state_for_ips.lock().await;
-                    for (i, server) in servers.iter().enumerate() {
-                        if i < app_lock.servers.len() {
-                            app_lock.servers[i].cidrs = server.cidrs.clone();
-                        }
-                    }
-                    if let Err(e) = app_lock.save_settings() {
-                        logger::error(&format!(
-                            "Failed to save settings after dynamic IP ranges load: {:?}",
-                            e
-                        ));
-                    } else {
-                        logger::info("Dynamic IP ranges (GCP + AWS) applied and saved successfully.");
-                        
-                        let updated_servers = app_lock.servers.clone();
-                        let _ = handle_for_ips.emit("servers-update", updated_servers);
-                    }
-                }
-            });
 
             
             let state_for_ping = state_clone.clone();
@@ -715,7 +680,7 @@ pub fn run() {
                         let mut lobby_conn: Option<(String, std::net::Ipv4Addr)> = None;
                         let mut play_conn: Option<(String, std::net::Ipv4Addr)> = None;
 
-                        // 1. Find Lobby Server from active TCP connections (prioritize LOBBY_HUBS)
+                        
                         for name in &current_connected {
                             if let Some((desc, ip)) = ip_mappings.get(name) {
                                 if LOBBY_HUBS.contains(&desc.as_str()) {
@@ -733,8 +698,8 @@ pub fn run() {
                             }
                         }
 
-                        // 2. Find Play Server
-                        // Case A: Is there a connected server that is unblocked?
+                        
+                        
                         for name in &current_connected {
                             if let Some((_, ip)) = ip_mappings.get(name) {
                                 let is_unblocked = servers.iter().any(|s| s.name == *name && !s.is_blocked);
@@ -745,7 +710,7 @@ pub fn run() {
                             }
                         }
 
-                        // Case B: Fall back to the unblocked server in Sombra's config
+                        
                         if play_conn.is_none() {
                             let unblocked_servers: Vec<ServerState> = servers.iter().filter(|s| !s.is_blocked).cloned().collect();
                             if !unblocked_servers.is_empty() {
@@ -756,14 +721,14 @@ pub fn run() {
                             }
                         }
 
-                        // Fallbacks
+                        
                         if lobby_conn.is_none() && play_conn.is_some() {
                             lobby_conn = play_conn.clone();
                         } else if play_conn.is_none() && lobby_conn.is_some() {
                             play_conn = lobby_conn.clone();
                         }
 
-                        // Emit status message only if the lobby server connection changes
+                        
                         if lobby_conn != last_lobby {
                             if let Some((ref name, ip)) = lobby_conn {
                                 let _ = handle_for_tracker.emit(
@@ -779,7 +744,7 @@ pub fn run() {
                             last_lobby = lobby_conn.clone();
                         }
 
-                        // Emit status message only if the play server connection changes
+                        
                         if play_conn != last_play {
                             if let Some((ref name, ip)) = play_conn {
                                 let _ = handle_for_tracker.emit(
