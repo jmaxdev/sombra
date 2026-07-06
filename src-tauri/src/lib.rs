@@ -648,7 +648,9 @@ pub fn run() {
             let handle_for_tracker = handle_clone.clone();
             tauri::async_runtime::spawn(async move {
                 let mut was_running = false;
-                let mut last_connected_servers = std::collections::HashSet::new();
+                let mut last_lobby: Option<(String, std::net::Ipv4Addr)> = None;
+                let mut last_play: Option<(String, std::net::Ipv4Addr)> = None;
+                const LOBBY_HUBS: &[&str] = &["ORD1", "GUE4", "ICN1", "AMS1", "FRA1", "TPE1"];
 
                 loop {
                     let overwatch_pid = find_overwatch_pid();
@@ -682,7 +684,8 @@ pub fn run() {
                         }
                     } else if overwatch_pid.is_none() && was_running {
                         was_running = false;
-                        last_connected_servers.clear();
+                        last_lobby = None;
+                        last_play = None;
                         let _ = handle_for_tracker.emit(
                             "status-message",
                             "GAME TRACKER // Overwatch 2 process closed.".to_string(),
@@ -704,35 +707,71 @@ pub fn run() {
                             for server in &servers {
                                 if ip_in_server_cidrs(ip, &server.cidrs) {
                                     current_connected.insert(server.name.to_string());
-                                    ip_mappings.insert(server.name.to_string(), ip);
+                                    ip_mappings.insert(server.name.to_string(), (server.description.to_string(), ip));
                                 }
                             }
                         }
 
-                        for server_name in &current_connected {
-                            if !last_connected_servers.contains(server_name) {
-                                if let Some(ip) = ip_mappings.get(server_name) {
-                                    let _ = handle_for_tracker.emit(
-                                        "status-message",
-                                        format!(
-                                            "GAME TRACKER // Connected to server: {} (IP: {})",
-                                            server_name, ip
-                                        ),
-                                    );
+                        let mut lobby_conn: Option<(String, std::net::Ipv4Addr)> = None;
+                        let mut play_conn: Option<(String, std::net::Ipv4Addr)> = None;
+
+                        for name in &current_connected {
+                            if let Some((desc, ip)) = ip_mappings.get(name) {
+                                let is_lobby_hub = LOBBY_HUBS.contains(&desc.as_str());
+                                if is_lobby_hub {
+                                    if lobby_conn.is_none() {
+                                        lobby_conn = Some((name.clone(), *ip));
+                                    } else if play_conn.is_none() {
+                                        play_conn = Some((name.clone(), *ip));
+                                    }
+                                } else {
+                                    if play_conn.is_none() {
+                                        play_conn = Some((name.clone(), *ip));
+                                    } else if lobby_conn.is_none() {
+                                        lobby_conn = Some((name.clone(), *ip));
+                                    }
                                 }
                             }
                         }
 
-                        for server_name in &last_connected_servers {
-                            if !current_connected.contains(server_name) {
+                        // Fallbacks if only one is detected
+                        if lobby_conn.is_none() && play_conn.is_some() {
+                            lobby_conn = play_conn.clone();
+                        } else if play_conn.is_none() && lobby_conn.is_some() {
+                            play_conn = lobby_conn.clone();
+                        }
+
+                        // Emit status message only if the lobby server connection changes
+                        if lobby_conn != last_lobby {
+                            if let Some((ref name, ip)) = lobby_conn {
                                 let _ = handle_for_tracker.emit(
                                     "status-message",
-                                    format!("GAME TRACKER // Disconnected from server: {}", server_name),
+                                    format!("[TCP] Lobby server: {} ({})", name, ip),
+                                );
+                            } else {
+                                let _ = handle_for_tracker.emit(
+                                    "status-message",
+                                    "GAME TRACKER // Lobby server disconnected".to_string(),
                                 );
                             }
+                            last_lobby = lobby_conn.clone();
                         }
 
-                        last_connected_servers = current_connected;
+                        // Emit status message only if the play server connection changes
+                        if play_conn != last_play {
+                            if let Some((ref name, ip)) = play_conn {
+                                let _ = handle_for_tracker.emit(
+                                    "status-message",
+                                    format!("[UDP] Play Server: {} ({})", name, ip),
+                                );
+                            } else {
+                                let _ = handle_for_tracker.emit(
+                                    "status-message",
+                                    "GAME TRACKER // Play server disconnected".to_string(),
+                                );
+                            }
+                            last_play = play_conn.clone();
+                        }
                     }
 
                     tokio::time::sleep(std::time::Duration::from_secs(3)).await;
