@@ -88,6 +88,41 @@ export default function App() {
   const [isGameRunning, setIsGameRunning] = useState(false);
   const [showGameRunningWarning, setShowGameRunningWarning] = useState(false);
   const [telemetryData, setTelemetryData] = useState<Record<string, Record<number, number[]>>>({});
+  const [modalPingHistory, setModalPingHistory] = useState<number[]>([]);
+
+  useEffect(() => {
+    if (!selectedServerForModal) {
+      setModalPingHistory([]);
+      return;
+    }
+    const ip = selectedServerForModal.ping_ip;
+    const desc = selectedServerForModal.description;
+    const existing = latencyHistory[desc] || [];
+    setModalPingHistory(existing);
+
+    let active = true;
+    const fastPing = async () => {
+      try {
+        const pingVal = await invoke<number | null>("ping_target", { ip });
+        if (!active) return;
+        if (pingVal !== null) {
+          setModalPingHistory((prev) => {
+            const next = [...prev, pingVal];
+            return next.slice(-20);
+          });
+        }
+      } catch (err) {
+        console.warn("Failed to fast ping target:", err);
+      }
+    };
+
+    fastPing();
+    const interval = setInterval(fastPing, 1500);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [selectedServerForModal]);
 
   useEffect(() => {
     let active = true;
@@ -970,12 +1005,14 @@ export default function App() {
         const canToggle = !isAutoMode && appState?.is_admin;
         const globalIndex = servers.findIndex((s) => s.description === server.description);
 
-        const rtHistory = latencyHistory[server.description] || (server.current_ping !== null ? [server.current_ping] : []);
+        const rtHistory = modalPingHistory.length > 0
+          ? modalPingHistory
+          : (latencyHistory[server.description] || (server.current_ping !== null ? [server.current_ping] : []));
         const minPing = rtHistory.length > 0 ? Math.min(...rtHistory) : null;
         const maxPing = rtHistory.length > 0 ? Math.max(...rtHistory) : null;
         const avgPing = rtHistory.length > 0 ? Math.round(rtHistory.reduce((a, b) => a + b, 0) / rtHistory.length) : null;
         const jitter = (minPing !== null && maxPing !== null) ? Math.max(0, maxPing - minPing) : 0;
-        const estRtt = avgPing !== null ? (avgPing + 30) : null;
+        const estRtt = rtHistory.length > 0 ? (rtHistory[rtHistory.length - 1] + (isGameRunning ? 10 : 30)) : null;
 
         const rtMax = rtHistory.length > 0 ? Math.max(...rtHistory, 1) : 100;
         const rtMin = rtHistory.length > 0 ? Math.min(...rtHistory) : 0;

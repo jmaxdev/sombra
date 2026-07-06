@@ -110,6 +110,15 @@ fn spawn_immediate_ping(state: Arc<Mutex<App>>, app_handle: AppHandle) {
 }
 
 #[tauri::command]
+async fn ping_target(ip: String) -> Result<Option<u32>, String> {
+    if let Ok(ipv4) = ip.parse::<std::net::Ipv4Addr>() {
+        Ok(ping::ping_ipv4(ipv4, std::time::Duration::from_millis(1000)))
+    } else {
+        Err("Invalid IP address".to_string())
+    }
+}
+
+#[tauri::command]
 async fn get_servers(state: State<'_, AppState>) -> Result<Vec<ServerState>, String> {
     let app = state.app.lock().await;
     Ok(app.servers.clone())
@@ -443,7 +452,8 @@ pub fn run() {
             block_all,
             find_best_server,
             save_autostart_settings,
-            is_game_running
+            is_game_running,
+            ping_target
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
