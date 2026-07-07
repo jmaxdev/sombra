@@ -1016,9 +1016,10 @@ export default function App() {
 
         const rtMax = rtHistory.length > 0 ? Math.max(...rtHistory, 1) : 100;
         const rtMin = rtHistory.length > 0 ? Math.min(...rtHistory) : 0;
-        const rtRange = Math.max(rtMax - rtMin, 15);
-        const graphMin = Math.max(0, rtMin - rtRange * 0.1);
-        const graphMax = rtMax + rtRange * 0.1;
+        const range = Math.max(rtMax - rtMin, 50);
+        const mid = (rtMax + rtMin) / 2;
+        const graphMin = Math.max(0, Math.round(mid - (range * 1.2) / 2));
+        const graphMax = Math.round(mid + (range * 1.2) / 2);
 
         const hourlyAverages = Array.from({ length: 24 }, (_, hour) => {
           const pings = telemetryData[server.description]?.[hour] || [];
@@ -1197,7 +1198,7 @@ export default function App() {
                       Real-Time Network Ping Trend
                     </span>
                     <span className="text-[10px] text-slate-500 font-mono">
-                      Updates every 8s
+                      Updates in real-time
                     </span>
                   </div>
                   
@@ -1216,7 +1217,15 @@ export default function App() {
                         return { x, y, val };
                       });
                       
-                      const linePath = points.map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+                      const linePath = points.reduce((acc, p, idx, arr) => {
+                        if (idx === 0) return `M ${p.x} ${p.y}`;
+                        const prev = arr[idx - 1];
+                        const cpX1 = prev.x + (p.x - prev.x) / 3;
+                        const cpY1 = prev.y;
+                        const cpX2 = prev.x + (2 * (p.x - prev.x)) / 3;
+                        const cpY2 = p.y;
+                        return `${acc} C ${cpX1} ${cpY1}, ${cpX2} ${cpY2}, ${p.x} ${p.y}`;
+                      }, "");
                       const areaPath = `${linePath} L ${width} ${height} L 0 ${height} Z`;
 
                       return (
